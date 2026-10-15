@@ -18,7 +18,7 @@ import { cannonPlan } from './cannon.js';
 import { hullOrStructure } from './structure.js';
 import { solveThrow } from './cargo.js';
 import { scrapOn, holdSpot, holdFull, holdCount, heavyHold, helmPlan } from './scrap.js';
-import { framesOn, pendingOf, frameSpot, calmFor } from './buildFrames.js';
+import { framesOn, pendingOf, frameSpot, framesCalm } from './buildFrames.js';
 import { cannonSeatName, sizeNamed } from './shipBuild.js';
 import { toWorldX, toWorldY, toShipX, toShipY, aimToShip } from './pose.js';
 import { captainFly, captainOf, callout, bombFalls, dropPossible } from './pvp/captainAI.js';
@@ -558,9 +558,7 @@ function scrapJobs(state, bot, patching = false) {
 }
 // FRAMES (config.FRAMES, LOOP.md G4): bots build only in a CALM - the tempo's calm or escape, no set piece, no fall, no raiders aboard, no fire burning, no gunship hunting, no live creature - so the gunners and the stokers are never short of hands in a crisis.
 function frameCalm(state) {
-  const R = config.RAFT;
-  if (R.ENABLED && state.run && state.run.raft && mainShip(state).layout.stations.filter((s) => s.kind === 'gun').length < R.BOTS.BUILD_ANY_PHASE_UNTIL_GUNS) return calmFor(state, ['build', 'peak', 'calm', 'escape']); // (P5: a raft with no gun cannot wait for a quiet sky to build one: any phase of the pacing, but still never in a fall, with raiders aboard, a fire, a gunship or a creature)
-  return calmFor(state, config.FRAMES.BOTS.ALLOW);
+  return framesCalm(state, config.FRAMES.BOTS.ALLOW); // (P5: buildFrames.js framesCalm: a raft with no gun builds in any phase)
 }
 // The build job a bot may take now (one frame at a time), or null.
 function frameJob(state, bot = null) {

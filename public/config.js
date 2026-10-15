@@ -2617,6 +2617,7 @@ export const config = {
       REWARD_MUL: 1.5, // the stop's salvage reward (x this)
       WIN_BONUS: 60, // salvage for the two parts aboard (a salvage run's own is DERELICT.RUN.WIN_BONUS 30): the raft's first dock has to afford the hull bay
     },
+    FIRE_SPREAD_MUL: 2, // a fire on the ONE-deck raft spreads this many times slower (480 px of deck with the coal in the middle and one extinguisher: it burns everywhere at once); a second deck puts it back to the normal pace
     PRICE_MUL: 0.75, // a raft voyage's Yard parts (the plain cards, the stripped parts' cards) cost this much of the usual price: she earns less than the Sparrow and has much more to buy
     DOCK: { // the sky-docks of a raft voyage: she is offered the things that GROW her first
       PLAN: ['hullBay', 'lowerDeck', 'gasbag', 'topDeck'], // the big card of dock 1, 2, 3 ...: the first of these she can take (a card she cannot take falls back to the Yard's random part); after the plan, random

@@ -39,7 +39,7 @@ const { generateVoyage } = await load('modules/host/voyage.js');
 const { scrollSpeed } = await load('modules/host/course.js');
 const BF = await load('modules/host/buildFrames.js');
 const { holdCount } = await load('modules/host/scrap.js');
-const R = config.RAFT;
+const R = config.RAFT, F = config.FRAMES;
 const DT = 1 / 60;
 const errors = [];
 const secs = (s) => Math.round(s * 60);
@@ -192,6 +192,9 @@ const flat = (parts) => buildLayout(parts);
   step(sim, secs(14), () => { helm.jx = 1; helm.jy = 0; helm.gas = 0; helm.lock = hs.n; st.ship.press = Math.min(Math.max(st.ship.press, 55), 80); best1 = Math.max(best1, scrollSpeed(st)); });
   report(best1 > 450 && best0 < 200, `she flies at ${Math.round(best1)} px/s with the engine (the bare raft: ${Math.round(best0)})`);
   report(!gun.done && gun.ok, 'the gun frame is still waiting and still has room on the changed ship (the re-cut keeps its place)');
+  // the arrows and the bots build in any phase of the pacing until she has a gun (RAFT.BOTS.BUILD_ANY_PHASE_UNTIL_GUNS); a Sparrow never does
+  st.tempo.phase = 'peak';
+  report(BF.framesCalm(st, F.ARROWS) === true && BF.calmFor(st, F.ARROWS) === false, 'a raft with no gun: the phones\' BUILD arrows and the bots work in a set piece (phase "peak") too; the plain rule would say no');
   const gunX0 = gun.x;
   const guns0 = gunsOf(ours.layout);
   raise(b, gun);

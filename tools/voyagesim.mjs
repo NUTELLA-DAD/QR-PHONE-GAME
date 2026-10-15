@@ -1,6 +1,6 @@
 // Full-voyage bot simulation. Plays whole voyages (8 stops) with bot crew and reports how far each got and why it died.
 //  --mode quick|voyage|campaign: the session-length mode (config.VOYAGE.MODES); --daily flies today's daily voyage. The table shows median minutes and victory rate.
-//  --build sparrow|classic|none: start the voyage with that ship and the Shipwright's Yard (part cards at the sky-docks, the bots vote for them): the table adds the parts bought by the Flagship. Default: sparrow (the ship the browser starts with). `none` = no start build (the classic ship, the old shop: what the golden baseline flies).
+//  --build sparrow|classic|raft|none (P5: raft = the tiny one-deck start with two gift frames, scrap on): start the voyage with that ship and the Shipwright's Yard (part cards at the sky-docks, the bots vote for them): the table adds the parts bought by the Flagship. Default: sparrow (the ship the browser starts with). `none` = no start build (the classic ship, the old shop: what the golden baseline flies).
 //  --profile bot|human (FUN.md F8): how the bots play (config.BOTS.PROFILES). `human` thinks slowly, aims loosely, answers alarms late and steers with a shaky hand, so its win rate is a better compass for people. Default: bot.
 // Usage: node tools/voyagesim.mjs [--runs 10] [--difficulty normal] [--mode voyage] [--bots 8] [--humans 0] [--topup] [--maxmin 45] [--stall 8] [--seed 1] [--verbose]
 //  natural mode (default): the run ends on a wreck or victory; the cause of the wreck is reported.

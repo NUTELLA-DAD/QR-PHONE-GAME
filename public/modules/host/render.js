@@ -3674,9 +3674,15 @@ export function createRenderer({ ctx, state: world, canvas }) {
           if (q) { at(q, zs); label(held ? 'GROUNDING...' : 'LIGHTNING! HOLD A ROD!', 0, -64, '27px ' + DISP, held ? '#9fe8ff' : '#fff27a', config.INK, 6); }
           if (!held) for (const r of J.rods || []) { const q2 = WP[r.d] && at3(r.x, WP[r.d].y - 205); if (q2) { at(q2, zs); label('HOLD!', 0, 0, '31px ' + DISP, '#fff27a', config.INK, 5); } }
         }
+        const tagLanes = []; // (P5: the raft has two frames 390 px apart: their tags would overlap on a small screen, so the later one stands a line higher)
         for (const fr of pendingFrames(world)) { // FRAMES (LOOP.md G4): the 3D scaffold is R4's; until then a gold tag over the deck point where the crew build says what is going up and how far it is
           const sp = frameSpot(ms, fr), q = WP[sp.d] && at3(sp.x, WP[sp.d].y - 235);
-          if (q) { at(q, zs); label(`BUILD ${String(fr.name).toUpperCase()} ${fr.fill}/${fr.need}`, 0, 0, '24px ' + DISP, '#ffd23f', config.INK, 6); if (fr.prog > 0) drawBar(0, 14, Math.min(1, fr.prog)); }
+          if (q) {
+            let lane = 0;
+            while (tagLanes.some((o) => o.lane === lane && Math.abs(o.x - q.x) < 360)) lane++;
+            tagLanes.push({ x: q.x, lane });
+            at(q, zs); label(`BUILD ${String(fr.name).toUpperCase()} ${fr.fill}/${fr.need}`, 0, -34 * lane, '24px ' + DISP, '#ffd23f', config.INK, 6); if (fr.prog > 0) drawBar(0, 14 - 34 * lane, Math.min(1, fr.prog));
+          }
         }
         const sea = world.sea;
         if (sea && sea.pump && WP[sea.pump.d]) {
