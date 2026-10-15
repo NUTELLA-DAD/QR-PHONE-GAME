@@ -661,7 +661,7 @@ export function createSimulation() {
   const newRun = () => {
     const prevLost = state.run && state.run.lost && state.run.lost.length ? state.run.lost[0] : null; // (a ship that had lost parts: the voyage starts again with her whole)
     const daily = state.daily ? dailyVoyage() : null;
-    const voyage = generateVoyage(daily ? daily.seed : (Math.random() * 2 ** 31) | 0, { mode: state.mode, gentle: !!state.startBuild && state.startBuild !== 'classic', classic: state.startBuild === 'classic' });
+    const voyage = generateVoyage(daily ? daily.seed : (Math.random() * 2 ** 31) | 0, { mode: state.mode, gentle: !!state.startBuild && state.startBuild !== 'classic', classic: state.startBuild === 'classic', firstEver: daily ? false : !(state.save.totalRuns > 0) }); // (P1: this TV's first-ever voyage meets the Titan as a tutorial; after that the opening is rolled - and the daily route, which everyone shares, always is)
     const first = voyage.columns[0][0];
     const M = modeInfo(state.mode);
     state.run = { voyage, stopId: first.id, visited: [first.id], salvage: 0, earned: 0, gain: {}, gunships: 0, kills: 0, crew: {}, bought: [], spares: sparesFor(state), sparesMax: sparesFor(state), limps: 0,

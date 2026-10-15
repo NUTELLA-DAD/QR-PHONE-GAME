@@ -2447,9 +2447,11 @@ export function createRenderer({ ctx, state: world, canvas }) {
     const cols = run.voyage.columns;
     const x0 = 150;
     const x1 = 1450;
+    const RM = config.VOYAGE.ROUTE_MAP;
     const px = (c) => x0 + ((x1 - x0) * c) / (cols.length - 1);
-    const py = (s) => 330 + (cols[s.col].length === 1 ? 0 : (s.row - (cols[s.col].length - 1) / 2) * 150);
+    const py = (s) => 330 + (cols[s.col].length === 1 ? 0 : (s.row - (cols[s.col].length - 1) / 2) * RM.ROW_GAP);
     const cur = stopById(run.voyage, run.stopId);
+    const halo = (t, x, y, w) => { ctx.save(); ctx.strokeStyle = 'rgba(24,16,8,.9)'; ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.strokeText(t, x, y, w); ctx.restore(); ctx.fillText(t, x, y, w); }; // (text that stays readable over the ship behind the map)
     // Paths.
     for (const col of cols) {
       for (const s of col) {
@@ -2474,7 +2476,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
         const idx = v.options.findIndex((o) => o.id === s.id);
         const choice = idx >= 0;
         const visited = run.visited.includes(s.id);
-        const r = choice ? 46 : 32;
+        const r = choice ? 46 : s.lair ? 40 : 32;
         const env = config.VOYAGE.ENVIRONMENTS[s.env] || config.VOYAGE.ENVIRONMENTS.skyisles;
         ctx.globalAlpha = choice || visited ? 1 : 0.55;
         ctx.fillStyle = visited && !choice ? '#8a7a55' : env.color;
@@ -2486,9 +2488,9 @@ export function createRenderer({ ctx, state: world, canvas }) {
         ctx.stroke();
         ctx.fillStyle = config.INK;
         ctx.textAlign = 'center';
-        ctx.font = (choice ? 44 : 30) + 'px "Segoe UI Emoji", sans-serif';
-        ctx.fillText(s.flagship ? '🚩' : s.id === cur.id ? '🛩️' : s.lair ? lairOf(s.creature).ICON : s.salvage ? config.VOYAGE.CURRICULUM.SALVAGE.ICON : env.icon, px(s.col), py(s) + (choice ? 15 : 10));
-        if (s.lair) { // a lair: a ring of its purple round the stop and a LAIR tag (config.CREATURES.LAIR)
+        ctx.font = (choice ? 44 : s.lair ? RM.LAIR_ICON_PX : 30) + 'px "Segoe UI Emoji", sans-serif';
+        ctx.fillText(s.flagship ? '🚩' : s.id === cur.id ? '🛩️' : s.lair ? lairOf(s.creature).ICON : s.salvage ? config.VOYAGE.CURRICULUM.SALVAGE.ICON : env.icon, px(s.col), py(s) + (choice || s.lair ? 15 : 10));
+        if (s.lair) { // a lair: a ring of its own colour round the stop (P1: its name, "Drake lair", stands under it, where the LAIR tag used to stand over it)
           ctx.strokeStyle = s.creature === 'eel' ? '#d4a82a' : s.creature === 'mother' ? '#7a52c8' : s.creature === 'wyrm' ? '#5b8fb8' : s.creature === 'titan' ? '#7a8a5a' : s.creature === 'thunderbird' ? '#4f6290' : s.creature === 'drake' ? '#c2452a' : '#7a3a5a';
           ctx.lineWidth = 6;
           ctx.setLineDash([8, 6]);
@@ -2496,33 +2498,31 @@ export function createRenderer({ ctx, state: world, canvas }) {
           ctx.arc(px(s.col), py(s), r + 9, 0, 7);
           ctx.stroke();
           ctx.setLineDash([]);
-          ctx.font = '18px ' + config.FONTS.DISPLAY;
-          ctx.lineWidth = 5;
-          ctx.strokeStyle = '#2b1622';
-          ctx.strokeText(lairOf(s.creature).LABEL, px(s.col), py(s) - r - (s.id === cur.id ? 34 : choice ? 40 : 18));
-          ctx.fillStyle = '#ffd6ee';
-          ctx.fillText(lairOf(s.creature).LABEL, px(s.col), py(s) - r - (s.id === cur.id ? 34 : choice ? 40 : 18));
         }
         ctx.globalAlpha = 1;
-        if (s.id === cur.id) {
+        // P1: every stop says what it is: its name (a lair: "Drake lair") and under it its kind (a lair: its sky), however far ahead
+        ctx.fillStyle = choice ? '#fff' : visited ? '#cdbd95' : '#f3ead6';
+        ctx.font = RM.NAME_PX + 'px ' + config.FONTS.DISPLAY;
+        halo(s.flagship ? 'THE FLAGSHIP' : s.lair ? lairOf(s.creature).KIND : env.name, px(s.col), py(s) + r + (choice ? 26 : 20), 176);
+        ctx.fillStyle = choice ? '#f3ead6' : visited ? '#b3a37c' : 'rgba(243,234,214,.85)';
+        ctx.font = '700 ' + RM.KIND_PX + 'px ' + config.FONTS.TEXT;
+        halo(s.lair ? env.name : config.VOYAGE.KIND_NAMES[s.kind] || s.kind, px(s.col), py(s) + r + (choice ? 44 : 38), 176);
+        if (s.id === cur.id) { // (under the name, where nothing else stands: the stop's own skulls and tag are not drawn once flown)
           ctx.fillStyle = '#ffd23f';
           ctx.font = '16px ' + config.FONTS.DISPLAY;
-          ctx.fillText('YOU ARE HERE', px(s.col), py(s) - r - 12);
+          halo('YOU ARE HERE', px(s.col), py(s) + r + 56, 176);
         }
         if (!choice && !visited) {
           ctx.fillStyle = 'rgba(243,234,214,.8)';
           ctx.font = '700 16px ' + config.FONTS.TEXT;
-          ctx.fillText(skulls(s.danger), px(s.col), py(s) + r + 22);
+          ctx.fillText(skulls(s.danger), px(s.col), py(s) + r + 56);
         }
         if ((s.tag || s.salvage) && !visited && s.id !== cur.id) { // what this column teaches that is new ("NEW: GUNSHIPS", "NEW: DARK"; config.VOYAGE.CURRICULUM): a tiny tag under the stop; a salvage run (the catch-up stop) says SALVAGE there, in a gentle green
           ctx.fillStyle = s.salvage ? '#c8f0c0' : '#ffe08a';
-          ctx.font = '700 ' + (choice ? 15 : 13) + 'px ' + config.FONTS.TEXT;
-          ctx.fillText(s.salvage ? config.VOYAGE.CURRICULUM.SALVAGE.TAG : s.tag, px(s.col), py(s) + r + (choice ? 52 : 40), 150);
+          ctx.font = '700 ' + RM.TAG_PX + 'px ' + config.FONTS.TEXT;
+          halo(s.salvage ? config.VOYAGE.CURRICULUM.SALVAGE.TAG : s.tag, px(s.col), py(s) + r + (choice ? 64 : 76), 176);
         }
         if (choice) {
-          ctx.fillStyle = '#fff';
-          ctx.font = '20px ' + config.FONTS.DISPLAY;
-          ctx.fillText(s.flagship ? 'THE FLAGSHIP' : s.lair ? lairOf(s.creature).KIND.toUpperCase() : env.name, px(s.col), py(s) + r + 28);
           dots(voters.filter((p) => p.vote === idx), px(s.col), py(s) - r - 24);
         }
       }
@@ -2545,10 +2545,11 @@ export function createRenderer({ ctx, state: world, canvas }) {
       ctx.font = '700 22px ' + config.FONTS.TEXT;
       ctx.fillText(`Reward: ${o.reward} salvage`, x + w / 2, y + 160);
     });
-    book.paper(400, 842, 800, 44, { r: 12 });
+    book.paper(320, 842, 960, 44, { r: 12 });
     ctx.fillStyle = LB.INK;
     ctx.font = '700 20px ' + config.FONTS.TEXT;
-    ctx.fillText(`${modeLine(run)}${run.daily ? ': ' + run.daily.name : ''}  -  stop ${stopNo(run, cur)} of ${stopTotal(run)} done  -  skulls = danger`, 800, 871, 770);
+    const flat = cols.flat(), skiesN = new Set(flat.map((q) => q.env)).size, beastsN = flat.filter((q) => q.lair).length; // (P1: the legend: how much variety this route holds)
+    ctx.fillText(`${modeLine(run)}${run.daily ? ': ' + run.daily.name : ''}  -  stop ${stopNo(run, cur)} of ${stopTotal(run)} done  -  ${skiesN} skies, ${beastsN} beast${beastsN === 1 ? '' : 's'} on this route  -  skulls = danger`, 800, 871, 930);
   };
 
   // End of the run: victory, or the summary after the ship is lost.

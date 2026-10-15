@@ -10,6 +10,11 @@
 //       - every middle column has a branch AT OR UNDER its base danger (a lair never takes the only one); a gentle route has a way round an outpost raid in its first two columns
 //       - the Nemesis, ring and multi-part flags only where their slot allows them; a ring column flags one raid; the Flagship carries the citadel
 //       - every stop leads on and is reachable; the same seed gives the same route
+//       (all of (a) is a TV's FIRST-EVER voyage - opts.firstEver true, which is also what a call with no firstEver means: the Titan at column 1, always, as ever)
+//   (a2) P1, 200 voyages per mode that are NOT first-ever (opts.firstEver false; PLAYTEST1.md P1): the opening is rolled and the skies vary
+//       - the Titan on 30-50% of the VOYAGE routes, at column 1 or 2 only (never both), as one branch among others (the column keeps a non-lair branch at its base skulls)
+//       - the Drake or the Rime Wyrm in 20% or more of the 7-8 stop routes (a light lair: slot lair: 'light', from LIGHT.FROM, Ember / Frost, no extra skulls); never two lairs in neighbouring columns; no more than COUNT besides the Titan
+//       - the first stop is a Sky Isles cave or pass; every column keeps a branch at base danger; the same seed gives the same route; VARY.ENABLED = false gives the first-ever routes
 //   (b) CURRICULUM.ENABLED = false gives exactly the old routes (a hash of 600 of them, tools/fixtures/voyage-legacy.json, taken before the curriculum existed)
 //   (c) in the game: a first stop allows only bats and imps for as long as we fly it (no gunship, no bombers, no strafers ever), the second stop's gates allow them all; a crew UNDER the expected power
 //       is offered a SALVAGE RUN on the route vote (the lowest-danger branch, kind salvage, lighter gates, the pass map flagged salvage, flown with 0 errors), a crew at the expected power or with no power
@@ -49,12 +54,13 @@ for (const [mode, o] of variants) {
   const fail = (s, msg) => { if (bad.length < 6) bad.push(`seed ${s}: ${msg}`); };
   const sawKind = new Set();
   for (const sd of seeds) {
-    const v = VG.generateVoyage(sd, { mode, ...o });
+    const v = VG.generateVoyage(sd, { mode, firstEver: true, ...o });
     stats.voyages++;
+    if (JSON.stringify(v) !== JSON.stringify(VG.generateVoyage(sd, { mode, ...o }))) fail(sd, 'no firstEver is not the first-ever route');
     const cols = v.columns, n = cols.length, m = n - h;
     stats.n[mode + (second ? '2' : '')] = stats.n[mode + (second ? '2' : '')] || {};
     stats.n[mode + (second ? '2' : '')][n] = (stats.n[mode + (second ? '2' : '')][n] || 0) + 1;
-    if (JSON.stringify(v) !== JSON.stringify(VG.generateVoyage(sd, { mode, ...o }))) fail(sd, 'not deterministic');
+    if (JSON.stringify(v) !== JSON.stringify(VG.generateVoyage(sd, { mode, firstEver: true, ...o }))) fail(sd, 'not deterministic');
     if (!v.curriculum) fail(sd, 'no curriculum flag');
     // shape
     if (n < M.stopsMin + h || n > M.stopsMax + h) fail(sd, `${n} columns, want ${M.stopsMin + h}-${M.stopsMax + h}`);
@@ -163,6 +169,77 @@ report(stats.lairs > 0 && Object.keys(stats.creatures).length >= 2, `lairs appea
 report(stats.titans > 0 && stats.titans === stats.titanEligible, `the Island Titan's lair (C.6c): ${stats.titans} on ${stats.titanEligible} routes that must have one (the second stop flown of a first voyage of ${TL.MIN_STOPS}+ stops that has Sky Isles stops there: Sky Isles, bats and imps only, never beside another lair)`);
 report(stats.nemesis > 0 && stats.multi > 0 && stats.rings.tower > 0 && stats.rings.fortress > 0 && stats.rings.citadel > 0, `Nemesis flags ${stats.nemesis}, multi-part flags ${stats.multi}, rings ${JSON.stringify(stats.rings)}, route-map tags ${stats.tags}`);
 console.log('INFO columns per mode: ' + Object.entries(stats.n).map(([k, v]) => k + ' ' + Object.entries(v).map(([c, x]) => c + 'x' + x).join('/')).join(', '));
+
+// ---- (a2) P1: a TV that has flown before: the Titan comes and goes, the skies vary, the Drake and the Wyrm can appear ----
+{
+  const VR = TL.VARY, LT = LR.LIGHT;
+  const bad = [];
+  const fail = (s, msg) => { if (bad.length < 6) bad.push(`seed ${s}: ${msg}`); };
+  const S = { routes: 0, voyageRoutes: 0, titans: 0, c1: 0, c2: 0, long: 0, longLight: 0, light: 0, passes: 0, first: 0, firstTitan1: 0, creatures: {} };
+  for (const [mode, o] of [['voyage', {}], ['voyage', { gentle: true }], ['campaign', {}], ['campaign', { gentle: true }]]) {
+    const table = VG.curriculumTable(mode);
+    for (const sd of seeds) {
+      const v = VG.generateVoyage(sd, { mode, firstEver: false, ...o });
+      const cols = v.columns, n = cols.length;
+      S.routes++;
+      if (mode === 'voyage' && !o.gentle) { S.voyageRoutes++; const f = VG.generateVoyage(sd, { mode, firstEver: true }); S.first++; if (f.columns[1].some((s) => isTitan(s))) S.firstTitan1++; }
+      if (JSON.stringify(v) !== JSON.stringify(VG.generateVoyage(sd, { mode, firstEver: false, ...o }))) fail(sd, 'not deterministic');
+      const first = cols[0][0];
+      if (first.env !== 'skyisles' || !['network', 'route'].includes(first.kind) || first.danger !== 1 || first.lair) fail(sd, `first stop ${first.env} ${first.kind}`);
+      if (first.kind === 'route') S.passes++;
+      const titans = cols.flat().filter(isTitan), lairCols = [], lightCols = [];
+      if (titans.length > 1) fail(sd, 'more than one Titan');
+      let lastTier = -1;
+      for (let c = 0; c < n; c++) {
+        const col = cols[c], mid = c > 0 && c < n - 1, row = table[col[0].slot];
+        if (mid && !col.some((s) => !s.lair && s.danger <= s.base)) fail(sd, `column ${c} has no plain branch at base danger`);
+        const tiers = col.filter((s) => !s.lair).map((s) => VG.envTier(s.env));
+        if (tiers.length) { const mn = Math.min(...tiers); if (mn < lastTier) fail(sd, `sky tiers go back at column ${c}`); lastTier = Math.max(lastTier, mn); }
+        for (const s of col) {
+          if (!s.lair) continue;
+          if (col.filter((q) => q.lair).length > 1) fail(sd, `two lairs in column ${c}`);
+          if (s.flagship || s.harbour || s.ring) fail(sd, 'lair on the Flagship, harbour or a ring stop');
+          if (isTitan(s)) {
+            if (c !== 1 && c !== 2) fail(sd, `Titan in column ${c}`);
+            if (s.env !== 'skyisles' || s.play !== 'skyisles' || s.kind !== 'lair' || s.gates.join() !== 'swarm,imps' || s.nemesis || s.multi) fail(sd, `${s.id} Titan lair is not a plain Sky Isles lair`);
+            S.titans++; if (c === 1) S.c1++; else S.c2++;
+          } else {
+            if (s.creature !== LR.BY_ENV[s.env]) fail(sd, 'lair creature does not match its sky');
+            if (row.lair === 'light') {
+              if (!LT.ENVS.includes(s.env) || s.share < LT.FROM) fail(sd, `${s.id} light lair in ${s.env} at ${s.share}`);
+              if (s.danger !== s.base + LT.DANGER && s.danger !== s.base + 1 + LT.DANGER) fail(sd, `${s.id} light lair danger ${s.danger}`);
+              lightCols.push(c);
+            } else if (row.lair === true) { if (s.share < CU.LAIR_FROM) fail(sd, `${s.id} lair at ${s.share}`); } else fail(sd, `${s.id} lair in a slot with no lair`);
+            S.creatures[s.creature] = (S.creatures[s.creature] || 0) + 1;
+            lairCols.push(c);
+          }
+        }
+      }
+      const maxLairs = n >= LR.LONG_STOPS ? LR.COUNT.long : LR.COUNT.short;
+      if (lairCols.length > maxLairs) fail(sd, `${lairCols.length} lairs besides the Titan, at most ${maxLairs}`);
+      const all = [...lairCols, ...titans.map((s) => s.col)];
+      if (all.some((c, i) => all.some((d, j) => i < j && Math.abs(c - d) <= 1))) fail(sd, 'two lairs in neighbouring columns');
+      if (n >= 7) { S.long++; if (lightCols.length) S.longLight++; }
+      if (lightCols.length) S.light++;
+      for (let c = 0; c < n - 1; c++) {
+        if (cols[c].some((s) => !s.next.length)) fail(sd, `a dead end in column ${c}`);
+        for (const t of cols[c + 1]) if (!cols[c].some((s) => s.next.includes(t.id))) fail(sd, `${t.id} cannot be reached`);
+      }
+    }
+  }
+  const pct = (a, b) => (b ? (100 * a) / b : 0);
+  report(!bad.length, `${S.routes} varied (not first-ever) routes: a cave or pass first, one plain branch in every column, lairs apart, no more than COUNT, links${bad.length ? '\n  ' + bad.join('\n  ') : ''}`);
+  const tp = pct(S.titans, S.routes);
+  report(S.titans > 0 && tp >= 30 && tp <= 50, `the Titan on ${tp.toFixed(1)}% of varied routes (want 30-50%, VARY.CHANCE ${VR.CHANCE}): column 1 x${S.c1}, column 2 x${S.c2}, never both in one route`);
+  const lp = pct(S.longLight, S.long);
+  report(S.long > 0 && lp >= 20 && S.creatures.drake > 0 && S.creatures.wyrm > 0, `the Drake or the Rime Wyrm on ${lp.toFixed(1)}% of ${S.long} routes of 7-8 stops (want 20% or more; ${S.light} routes in all, drake x${S.creatures.drake}, wyrm x${S.creatures.wyrm}); ${S.passes} of ${S.routes} routes open with a narrow pass`);
+  report(S.first > 0 && S.firstTitan1 === S.first, `first-ever voyages: the Titan at column 1 on ${S.firstTitan1} of ${S.first} VOYAGE routes (always)`);
+  VR.ENABLED = false;
+  let same = true;
+  for (const sd of seeds) if (JSON.stringify(VG.generateVoyage(sd, { mode: 'voyage', firstEver: false })) !== JSON.stringify(VG.generateVoyage(sd, { mode: 'voyage', firstEver: true }))) same = false;
+  VR.ENABLED = true;
+  report(same, 'TITAN.LAIR.VARY.ENABLED = false: a route that is not first-ever is exactly the first-ever route (today\'s game)');
+}
 
 // ---- (b) the switch: ENABLED = false is the old dice, byte for byte ----
 {
