@@ -290,7 +290,9 @@ export function createShipSim(world, ship, W) {
       const valve = modules.list.find((m) => m.kind === 'pipe' && here(m, reach));
       return valve ? { type: 'valve', obj: valve, label: valve.open ? 'Close valve' : 'Open valve' } : null;
     };
-    const vvLate = GV2.ENABLED && !player.bot;
+    const raftBot = player.bot && ship.main && world.run && world.run.raft && config.RAFT.ENABLED; // (P5: on the raft the coal, the ammo and the helm stand 65-75 px apart with a pipe valve between them: a bot's valve and vent come after the stations too, as a person's do, or its Action at the coal bunker turns the valve)
+    const vvLate = GV2.ENABLED && (!player.bot || raftBot);
+    if (raftBot && player.botJob && player.botJob.kind === 'valve' && player.botJob.obj && here(player.botJob.obj, T.REACH)) { const m = player.botJob.obj; return { type: 'valve', obj: m, label: m.open ? 'Close valve' : 'Open valve' }; } // (...and a bot sent to a valve gets the valve)
     if (!vvLate) { const vv = ventValve(T.REACH); if (vv) return vv; }
     if (station) {
       const gun = state.GUNS[station.n];

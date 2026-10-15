@@ -1060,6 +1060,24 @@ export const config = {
           { env: ['aether'], kinds: ['network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 3, ring: 'citadel' }, // 8: the Flagship
         ],
         campaign: 'voyage', // (a name: use that table)
+        // P5: the tables of a voyage that starts on the RAFT (voyage.js opts.raft): row 1 is the Breaker's Yard (a salvage run, yard: true), and the next stops are kinder than the Sparrow's - no gunship before stop 4, no bombers before stop 3,
+        // no outpost raid before she can have a bomb bay (stop 4), the tower a column later - because she arrives with one gun. The threats follow what she has: P6 (RAFT.GATES).
+        raft: [
+          { env: ['skyisles'], kinds: ['salvage'], gates: ['swarm'], danger: 1, yard: true }, // 1: the Breaker's Yard
+          { env: ['skyisles'], kinds: ['route', 'network'], gates: ['swarm', 'imps', 'strafers'], danger: 1 }, // 2: a pass or a cave: bats, imps and the first planes for her first gun
+          { env: ['skyisles', 'A'], kinds: ['route', 'network'], gates: ['swarm', 'imps', 'strafers'], danger: 2, lair: 'light' }, // 3: a new sky, no raid yet, no bombers
+          { env: ['A', 'sea'], kinds: ['route', 'network'], gates: ['swarm', 'imps', 'strafers'], danger: 2, lair: 'light' }, // 4: Frost, Ember or the sea; still no raid and no gunship (a 6-stop route reaches this row as its 3rd stop)
+          { env: ['B'], kinds: ['open', 'route', 'network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 2, nemesis: true }, // 5: the dark skies and the first gunship (a 6-stop route reaches this as its 4th stop)
+          { env: ['B'], kinds: ['open', 'route', 'network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 3, lair: true, ring: 'tower' }, // 6: a lair or the tower
+          { env: ['B'], kinds: ['open', 'route', 'network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 3, lair: true, ring: 'fortress', multi: true }, // 7: the fortress or the multi-part slot
+          { env: ['aether'], kinds: ['network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 3, ring: 'citadel' },
+        ],
+        raft_quick: [ // the 4-stop raft voyage: the yard, a pass, a new sky with a tower or a lair, the Flagship
+          { env: ['skyisles'], kinds: ['salvage'], gates: ['swarm'], danger: 1, yard: true },
+          { env: ['skyisles'], kinds: ['route', 'network'], gates: ['swarm', 'imps', 'bombers', 'strafers'], danger: 2 },
+          { env: ['A', 'B'], kinds: ['open'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 3, lair: true, ring: 'tower' },
+          { env: ['aether'], kinds: ['network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 3, ring: 'citadel' },
+        ],
       },
     },
     CHOICES_MIN: 2, // stops to choose between in each middle column
@@ -2596,8 +2614,10 @@ export const config = {
       AT: [0.15, 0.45, 0.75], // where the three wrecks hang along the field (shares of its width): the first is 1200 px from the start, so even the raft with no engine drifts to it
       FIRST_MIN_COL: 14, // the first wreck may hang this near the start (map squares; the start is at 12, a normal wreck no nearer than 30)
       RATE_MUL: 0.5, // the pacing director's speed there: bats only, at half rate
-      REWARD_MUL: 1, // the stop's salvage reward
+      REWARD_MUL: 1.5, // the stop's salvage reward (x this)
+      WIN_BONUS: 60, // salvage for the two parts aboard (a salvage run's own is DERELICT.RUN.WIN_BONUS 30): the raft's first dock has to afford the hull bay
     },
+    PRICE_MUL: 0.75, // a raft voyage's Yard parts (the plain cards, the stripped parts' cards) cost this much of the usual price: she earns less than the Sparrow and has much more to buy
     DOCK: { // the sky-docks of a raft voyage: she is offered the things that GROW her first
       PLAN: ['hullBay', 'lowerDeck', 'gasbag', 'topDeck'], // the big card of dock 1, 2, 3 ...: the first of these she can take (a card she cannot take falls back to the Yard's random part); after the plan, random
       CARDS: 4, CARDS_BIG: 5, BIG_CREW: 10, // cards at a dock (Cast off included); a crew of BIG_CREW or more gets CARDS_BIG (the phone's dock5 grid)

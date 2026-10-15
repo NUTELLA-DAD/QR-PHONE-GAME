@@ -112,9 +112,9 @@ function generateCurriculum(seed, opts = {}) {
   const V = config.VOYAGE;
   const C = V.CURRICULUM;
   const mode = modeInfo(opts.mode);
-  const table = curriculumTable(opts.mode);
   const second = (opts.voyageNo || 1) > 1;
   const raft = !!opts.raft && config.RAFT.ENABLED && !second; // (P5: a voyage that starts on the raft: its first stop is the Breaker's Yard, the Titan stays off the route, the rest varies as P1's does)
+  const table = raft ? C.TABLES[opts.mode === 'quick' ? 'raft_quick' : 'raft'] : curriculumTable(opts.mode); // (...and it has tables of its own: kinder early stops)
   const vary = (opts.firstEver === false || raft) && config.CREATURES.TITAN.LAIR.VARY.ENABLED; // (P1: a TV that has flown before gets a rolled opening and light lairs; no firstEver (the tools, a direct call) = the tutorial route as ever)
   const bonus = second ? V.SECOND.DANGER_BONUS : 0;
   const h = second ? 1 : 0; // (the harbour column)
@@ -129,7 +129,7 @@ function generateCurriculum(seed, opts = {}) {
     const last = c === n - 1;
     const share = c < h ? 0 : s0 + ((c - h) / Math.max(1, m - 1)) * (1 - s0);
     const slot = Math.round(share * (table.length - 1));
-    const e = raft && c === h ? { ...table[slot], env: ['skyisles'], kinds: ['salvage'], varyKinds: null, gates: ['swarm'], danger: 1, yard: true } : table[slot]; // (P5: the first stop flown on a raft is the Breaker's Yard: a salvage run on a field map, bats only, one skull)
+    const e = table[slot];
     const base = last ? maxD : c < h ? 1 : Math.min(maxD, e.danger + bonus);
     const count = c === 0 || last ? 1 : ri(V.CHOICES_MIN, V.CHOICES_MAX);
     const easyRow = ri(0, count - 1); // (this branch is always at the column's base skulls)

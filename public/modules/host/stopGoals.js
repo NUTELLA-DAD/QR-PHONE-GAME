@@ -68,7 +68,7 @@ export function createStopGoals({ state, finish, deps }) {
     const F = g.kind === 'salvage' ? K.RUN : K.DEFEND;
     if (win) {
       mendHull(state, config.COURSE.CHECKPOINT_REPAIR);
-      deps.salvage && deps.salvage(F.WIN_BONUS, g.kind === 'salvage' ? 'Salvage run complete!' : 'Balloon saved!');
+      deps.salvage && deps.salvage(g.yard ? config.RAFT.YARD.WIN_BONUS : F.WIN_BONUS, g.kind === 'salvage' ? (g.yard ? 'The yard is stripped!' : 'Salvage run complete!') : 'Balloon saved!');
     } else if (c.stop) c.stop.rewardMul = F.FAIL_REWARD;
     say(text, 5);
     const ri = runInfo();

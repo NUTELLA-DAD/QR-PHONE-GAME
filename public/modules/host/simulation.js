@@ -935,6 +935,7 @@ export function createSimulation() {
   // The leg of the voyage a stop is (the first stop flown is leg 1, in the second voyage of a campaign too): after the legs in PARTS_SHOP.DERELICT_STOPS a derelict is found and its part is free.
   const legNo = (stop) => stop.col + (state.run.voyageNo > 1 ? 0 : 1);
   // At most ONE part card per dock: a part this build can take, with up to YARD.SLOT_MAX places it can go (each already checked: never a FAIL).
+  const raftPrice = (n) => (state.run && state.run.raft && config.RAFT.ENABLED ? Math.round((n * config.RAFT.PRICE_MUL) / 5) * 5 : n); // (P5: a raft voyage buys its parts a little cheaper: she earns less than the Sparrow and has more to buy)
   const partCard = () => {
     if (!state.startBuild) return null; // (headless tools without a start build keep the old shop)
     if (state.run.lost && state.run.lost.length) return null; // (no new parts for a ship with sections missing: rebuild first - the REBUILD cards)
@@ -948,7 +949,7 @@ export function createSimulation() {
     const e = offer.entry;
     run.lastPart = e.id;
     state.yard.sum = offer.base.sum; // (the TV's gauges: the ship as she is)
-    return { id: 'part-' + e.id, kind: 'part', entry: e.id, baseName: e.name, name: e.name, icon: e.icon, pic: e.pic, picDir: e.picDir, desc: e.blurb, cost: found ? 0 : partPrice(e, run.parts.length, crewHeads(state)),
+    return { id: 'part-' + e.id, kind: 'part', entry: e.id, baseName: e.name, name: e.name, icon: e.icon, pic: e.pic, picDir: e.picDir, desc: e.blurb, cost: found ? 0 : raftPrice(partPrice(e, run.parts.length, crewHeads(state))),
       derelict: found, badge: found ? 'FREE: found in a wreck' : 'NEW PART' + (offer.fit.hint ? ': ' + offer.fit.hint : ''), rec: offer.fit.score >= YD.REC.MIN, choices: offer.choices, now: offer.base.sum, baseWarns: offer.base.res.warns, spots: offer.choices.length }; // (rec: it answers what she lacks, partsShop.js fitOf: the tag says what, the bots vote for it more often)
   };
   // The TROPHY of a slain creature (partsShop.js CATALOGUE 'krakenBeak'): a free part card at the next dock, until the crew takes it (a ship with a ram prow gets the beak in its place).
@@ -975,7 +976,7 @@ export function createSimulation() {
       if (seen++ < skip) continue;
       const e = offer.entry, nm = q.from + "'s " + q.label, who = q.by.length ? q.by.join(' and ') : 'the crew';
       state.yard.sum = offer.base.sum;
-      return { id: 'named-' + q.entry + '-' + ri.pending.indexOf(q), kind: 'part', entry: e.id, baseName: e.name, name: nm.charAt(0).toUpperCase() + nm.slice(1), icon: e.icon, pic: e.pic, picDir: e.picDir, desc: `Stripped by ${who}. ${e.blurb}`, cost: Math.round((partPrice(e, run.parts.length, crewHeads(state)) * NM.COST_SHARE) / 5) * 5,
+      return { id: 'named-' + q.entry + '-' + ri.pending.indexOf(q), kind: 'part', entry: e.id, baseName: e.name, name: nm.charAt(0).toUpperCase() + nm.slice(1), icon: e.icon, pic: e.pic, picDir: e.picDir, desc: `Stripped by ${who}. ${e.blurb}`, cost: Math.round((raftPrice(partPrice(e, run.parts.length, crewHeads(state))) * NM.COST_SHARE) / 5) * 5,
         named: q, badge: NM.TAG, choices: offer.choices, now: offer.base.sum, baseWarns: offer.base.res.warns, spots: offer.choices.length };
     }
     return null;

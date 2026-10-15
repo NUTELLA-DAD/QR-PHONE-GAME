@@ -540,7 +540,7 @@ function scrapJobs(state, bot, patching = false) {
   if (!scrapOn() || state.phase !== 'flying' || state.ship.down || bot.mate || bot.team === 'enemy') return [];
   const ship = mainShip(state), L = ship.layout, sp = holdSpot(L);
   if (!sp || ship.ai) return [];
-  const out = [], full = holdFull(state), frame = frameJob(state);
+  const out = [], full = holdFull(state), frame = frameJob(state, bot);
   if (bot.carry === 'scrap') {
     if (patching) return out; // (G2: a failing segment wants this bundle: the patch job is ahead of the bin)
     if (frame) { out.push(frame); return out; } // (G4: a calm, and a part bought as a frame is waiting for its bundles: carry this one to it)
@@ -563,15 +563,16 @@ function frameCalm(state) {
   return calmFor(state, config.FRAMES.BOTS.ALLOW);
 }
 // The build job a bot may take now (one frame at a time), or null.
-function frameJob(state) {
+function frameJob(state, bot = null) {
   if (!framesOn() || !frameCalm(state)) return null;
   const open = pendingOf(state).filter((q) => q.ok !== false);
   if (!open.length) return null;
   const R = config.RAFT, raft = R.ENABLED && state.run && state.run.raft;
   let f = open[0];
   if (raft) { // (P5: the raft has two frames at once and a whole crew with nothing else to do: up to MAX_ON_FRAME bots on one, the rest on the next)
-    const on = (q) => Object.values(state.players).filter((b) => b.bot && b.botJob && b.botJob.obj === q).length;
-    f = open.find((q) => on(q) < R.BOTS.MAX_ON_FRAME) || open[0];
+    const on = (q) => Object.values(state.players).filter((b) => b !== bot && b.bot && b.botJob && b.botJob.kind === 'buildframe' && b.botJob.obj === q).length; // (the others on it: a bot counting itself flipped between the two frames every step)
+    const mine = bot && bot.botJob && bot.botJob.kind === 'buildframe' && open.includes(bot.botJob.obj) ? bot.botJob.obj : null; // (...and a bot already on a frame stays on it)
+    f = mine || open.find((q) => on(q) < R.BOTS.MAX_ON_FRAME) || open[0];
   }
   return { kind: 'buildframe', obj: f, max: raft ? R.BOTS.MAX_ON_FRAME : 2, cap: raft ? R.BOTS.CAP : config.FRAMES.BOTS.CAP };
 }
