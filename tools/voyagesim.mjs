@@ -132,6 +132,10 @@ if (args.runs > 1 && !args.child) {
       console.log('ring stops (F12): ' + [['all', rs], ...['tower', 'fortress', 'citadel'].map((v) => [v, rs.filter((x) => x.variant === v)])].filter(([, l]) => l.length).map(([n, l]) => line(n, l)).join(' | '));
     }
   }
+  { // PLAY OF THE MISSION (SHIPS_BOOK.md L7): scorecards, how many had a film of the stop's top moment, awards per card, the recorder's memory (only with BOOK_ON=1)
+    const pl = ok.filter((r) => r.play && r.play.cards), sum = (k) => pl.reduce((a, r) => a + (r.play[k] || 0), 0);
+    if (pl.length) console.log(`play of the mission (L7): ${sum('cards')} scorecards, ${sum('films')} with a film (${Math.round((100 * sum('films')) / Math.max(1, sum('cards')))}%, ${(sum('filmSecs') / Math.max(1, sum('films'))).toFixed(1)} s of sky each), ${(sum('awards') / Math.max(1, sum('cards'))).toFixed(1)} awards a card, recorder peak ${Math.round(Math.max(...pl.map((r) => r.play.peakKb)))} KB`);
+  }
   { // THE NEMESIS (SHIPS_BOOK.md L4): how often she flew, was driven off, was sunk for good, and bested the ship (only with BOOK_ON=1)
     const nm = ok.filter((r) => r.nemesis), sum = (k) => nm.reduce((a, r) => a + (r.nemesis[k] || 0), 0);
     if (nm.length) console.log(`nemesis (L4): met ${sum('meetings')} times in ${nm.filter((r) => r.nemesis.meetings).length} of ${nm.length} voyages, driven off ${sum('escapes')}, sunk for good ${sum('slain')}, bested the ship ${sum('ours')}, final showdowns ${sum('final')}`);
@@ -234,6 +238,7 @@ const curve = []; // (G0: per stop reached, the ship's power against the curricu
 let curveStop = null;
 const lairs = { seen: new Set(), won: new Set(), met: 0, how: {} };
 const shape = { stops: 0, plain: 0, brief: 0, escape: 0, gunship: 0, midBoss: 0, docks: 0, cards: {}, dockSecs: 0, menuSecs: 0 }, shapeSeen = {}; let shapeStop = null; // (F6)
+const play = { cards: 0, films: 0, filmSecs: 0, awards: 0, peakKb: 0 }; let playSeen = null; // (L7: scorecards, how many had a film, the film's seconds of sky, awards shown, the recorder's biggest memory)
 const hullBy = {}; // (F1: per stop flown, the hull while flying and the minutes: result.hullBy)
 const ringStops = {}; // (F12: per ring stop: the castle, when it was entered, when its crown fell, how many faces were down at the last step)
 const wrecks = []; // (balance pass: the text of every wreck of the voyage, limps included, from the moment the ship goes down)
@@ -252,6 +257,8 @@ for (let step = 1; step <= maxSteps && !result; step++) {
       if (state.goingDown && !globalThis.__tfWas) console.error(`FALL at stop ${state.run && state.run.stopId} t=${(step / 3600).toFixed(2)}:\n` + globalThis.__tf.join('\n'));
       globalThis.__tfWas = !!state.goingDown;
     }
+    if (state.scorecard && state.scorecard !== playSeen) { playSeen = state.scorecard; play.cards++; play.awards += (state.scorecard.rows || []).length; if (state.scorecard.film) { play.films++; play.filmSecs += state.scorecard.film.clip.len; } } // (L7)
+    if (step % 60 === 0 && sim.replay) play.peakKb = Math.max(play.peakKb, sim.replay.stats().bytes / 1024);
     { // (F6: what the stop shape did: counted per stop, per dock)
       const sid = state.run && state.run.stopId, st = sid && state.run.voyage.columns.flat().find((x) => x.id === sid);
       if (sid && sid !== shapeStop) { shapeStop = sid; shape.stops++; if (st && !st.lair && !st.ring && !st.flagship) shape.plain++; }
@@ -321,6 +328,7 @@ result.nemesis = state.run.nemesis ? { meetings: state.run.nemesis.meetings, esc
 result.hullBy = Object.values(hullBy); // (F1: { col, hull, n, t0, t1 } per stop reached)
 result.fun = fun.result(); // (FUN.md F8)
 result.shape = shape; // (F6)
+result.play = play; // (L7)
 result.ringStops = Object.values(ringStops).map(({ rg, ...x }) => x); // (F12)
 result.profile = args.profile;
 result.offers = state.run.offers || { lair: [], salvage: [], taken: [] }; // (G0: the lairs and salvage runs the route votes offered, and the stops the crew took)

@@ -290,6 +290,7 @@ export function createControllerUI({ network }) {
   const updateUI = (next) => {
     if (next.fx) return showFx(next.fx);
     if (next.welcome) return showWelcome(next.welcome);
+    if (next.award) return showCard({ icon: next.award.icon, title: next.award.title, text: next.award.text }, next.award.secs || 7); // (L7: the award this phone won on the scorecard)
     if (next.rd) return showRadar(next.rd);
     if (next.tm && Object.keys(next).length === 1) return showTeam(next.tm); // (Versus: just the side he is on, sent at once when he swaps)
     showTeam(next.tm);

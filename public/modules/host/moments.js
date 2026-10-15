@@ -3,7 +3,7 @@
 // kept in a ring buffer, state.moments (world level: ships.js WORLD_SHARED). It is DATA ONLY: recording a moment draws no random number, changes nothing in the sim and does not touch the order of anything, so a seeded run
 // plays out exactly as it did (tools/buildsim.mjs --check-botsim). logWriter.js turns the moments of a stop into sentences; logArt.js draws them.
 //
-//   const moments = createMoments({ world, stopInfo, helm }) world = the world state; stopInfo() -> { no, name, env } of the stop being flown (or null); helm() = whoever holds the main ship's helm
+//   const moments = createMoments({ world, stopInfo, helm, onMoment }) world = the world state; onMoment(m) = told of each moment recorded (L7: replay.js starts filming the heavy ones; it never writes the sim); stopInfo() -> { no, name, env } of the stop being flown (or null); helm() = whoever holds the main ship's helm
 //   world.moment(kind, { who, where, what, weight, data })   record one (also W.moment in the ships' code). who = players, ids or names; none given -> the busiest crewman of that job (never nobody)
 //   world.momentNote(tag, player)                            count a small thing for a later moment (a tally, per stop)
 //   moments.noteStat(player, key, n)                         simulation.js stat(): the first fire out, a revive under fire
@@ -24,7 +24,7 @@ const BUSY = {
 };
 const ANY = ['kills', 'repairs', 'holes', 'fires', 'coal', 'ammo', 'raiders', 'revives', 'jumps']; // (when there is nothing else to go by)
 
-export function createMoments({ world, stopInfo, helm }) {
+export function createMoments({ world, stopInfo, helm, onMoment }) {
   const LG = () => config.LOG;
   const ring = (world.moments = []);
   let t = 0, n = 0; // the clock (seconds of flying) and the moment counter
@@ -35,6 +35,7 @@ export function createMoments({ world, stopInfo, helm }) {
   let carry = {}; // name -> { kind, since } while he holds a sandbag / crate
   let carried = new Set(); // names that already earned the sandbag moment this stop
   let crisis = { t: 0, helm: {} }; // a stretch of trouble: seconds so far, and how long each person held the helm in it
+  let held = {}; // player id -> the load in his hands last step (L7: a load that is gone because he was knocked out or fell is 'butterfingers', a tally)
 
   // ---- who ----
   const crew = () => Object.values(world.players).filter((p) => p && !p.mate && !p.enemy && p.connected !== false);
@@ -77,6 +78,7 @@ export function createMoments({ world, stopInfo, helm }) {
     if (m.weight > 0 && m.who.length) totals.named++;
     totals.kinds[kind] = (totals.kinds[kind] || 0) + 1;
     while (ring.length > LG().RING) ring.shift();
+    if (onMoment) { try { onMoment(m); } catch { /* (the film is never worth a crash) */ } }
     return m;
   }
   const note = (tag, p) => {
@@ -127,6 +129,11 @@ export function createMoments({ world, stopInfo, helm }) {
     const seen = {};
     for (const p of Object.values(world.players)) {
       if (!p || p.mate || p.enemy) continue;
+      if (config.AWARDS.ENABLED) { // (L7 awards v2: a load that was in his hands and is gone because he was knocked out or fell: Butterfingers)
+        const load = config.AWARDS.BUTTER.LOADS.includes(p.carry) ? p.carry : null;
+        if (held[p.id] && !p.carry && (p.ko > 0 || p.fall)) note('drops', p);
+        if (load) held[p.id] = load; else delete held[p.id];
+      }
       if (p.carry === 'sandbag' || p.carry === 'crate') {
         const c = carry[p.name];
         if (!c || c.kind !== p.carry) carry[p.name] = { kind: p.carry, since: t };
@@ -171,7 +178,7 @@ export function createMoments({ world, stopInfo, helm }) {
 
   const restart = () => {
     ring.length = 0;
-    t = 0; n = 0; closed = 0; firstFire = false; tallies = {}; falls = {}; carry = {}; carried = new Set(); crisis = { t: 0, helm: {} };
+    t = 0; n = 0; closed = 0; firstFire = false; tallies = {}; falls = {}; carry = {}; carried = new Set(); crisis = { t: 0, helm: {} }; held = {};
   };
 
   // `world.moment` is what the rest of the game calls (a ship's context finds it through the prototype: ships.js WORLD_SHARED). Not enumerable: they are no data.
