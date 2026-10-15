@@ -20,6 +20,8 @@ const AWAY_BOT_TRIPS_ON = typeof process !== 'undefined' && !!(process.env && pr
 const EEL_FINALE_ON = typeof process === 'undefined' || !!(process.env && process.env.WITH_EEL);
 // G5 / G6 (LOOP.md): derelicts you board and strip for named parts, and the two stops that are about them (SALVAGE RUN: strip the wrecks before the storm; DEFEND: hold a stranded balloon against the bats). ON in the game; NO_DERELICTS=1 in a tool is the old game (no wrecks, the old beacon salvage run, no DEFEND stop). The seeded baselines pin the away team off (NO_AWAY=1), which turns all of it off too.
 const DERELICT_ON = typeof process === 'undefined' || !(process.env && process.env.NO_DERELICTS);
+// A4 (CASTLE.md, ground sword fights): a crewman on the ground fights a soldier with a sword swing, a timed BLOCK / PARRY and a flank bonus for two (AWAY.DUEL). ON in the game; NO_DUEL=1 in a tool is the old shove-to-escape (the objectives and treasure gates pin it). The seeded baselines pin the away team off (NO_AWAY=1), which turns all of it off too.
+const DUEL_ON = typeof process === 'undefined' || !(process.env && process.env.NO_DUEL);
 export const config = {
   W: 1600,
   H: 900,
@@ -1517,6 +1519,31 @@ export const config = {
       SEEK: 3000, // px: the phone's arrow points at a chest this near the man
       BOT: { VAULT_CALL: 120, RANGE: 1500, TIME: 75 }, // tools (BOT_TRIPS): the bot helm hovers over an open vault for at most VAULT_CALL s; a trip starts for a chest within RANGE px of the rope; a tripping bot gives up after TIME s
     },
+    // GROUND SWORD FIGHTS (CASTLE.md package A4; duel.js): a man on the ground near a soldier fights back. ENABLED false (NO_DUEL=1 in a tool) = A1/A2's shove-to-escape. All of it needs the away team (3 or more crew).
+    //   THE MAN     ATTACK swings his sword (SWING.WIND s of wind-up, then a hit on the nearest soldier in front within SWING.REACH px, SWING.CD s until the next). The second button (JUMP, relabelled BLOCK) raises a guard for BLOCK.GUARD s; a
+    //               soldier's blow that lands while it is up does nothing, and one that lands within BLOCK.PARRY s of the press (a LATE press) is a PARRY: the soldier is staggered. After a guard BLOCK.CD s pass before the next. Both buttons turn him to the nearest soldier.
+    //   THE SOLDIER (a plaza squad's fighters, a vault guard who is reached) runs at his man at FOE.SPEED, stands FOE.ENGAGE px off, waits FOE.READY s, raises his sword for FOE.TELL s (a "!", the phone buzzes and flashes) and strikes whoever is in front
+    //               within FOE.REACH (+SLACK) px: FOE.HEARTS hearts (FOE.IFRAMES s of i-frames after), the last one is the usual knock-out. After a blow he is open for FOE.RECOVER s; a parried soldier for FOE.STAGGER s (hits on him take COUNTER more).
+    //               FOE.HP hits and he is down for FOE.DOWN s, then runs off for FOE.FLEE s (out of the squad for good). Two soldiers never start a swing at one man within FOE.GAP s of each other.
+    //   TEAM-UPS    a hit on a soldier who faces another crewman (the blow comes from behind) takes FLANK.BONUS more.
+    //   THE SQUAD   a hunting plaza squad sends SQUAD.FIRST soldiers (+1 for each other crewman near) and one more every SQUAD.REINFORCE s, at most SQUAD.MAX at once; the rest go home. After SQUAD.BREAK soldiers down the squad gives up the hunt.
+    //   SHIPS       a shell bursting within SHELL.R px of a fighter takes SHELL.HP hits off him and staggers him; a bomb (BOMBS.RADIUS) kills him.
+    DUEL: {
+      ENABLED: DUEL_ON,
+      AIM: 330, DY: 200, // px: ATTACK / BLOCK are a duel's when a soldier stands this near (sideways) and this high ...
+      SWING: { WIND: 0.16, CD: 0.5, REACH: 125, DMG: 1 },
+      BLOCK: { GUARD: 0.6, PARRY: 0.3, CD: 0.5 },
+      FOE: { HP: 3, SPEED: 190, ENGAGE: 85, OFFSET: 25, REACH: 100, SLACK: 35, READY: 0.25, TELL: 0.8, RECOVER: 0.7, STAGGER: 1.5, KNOCK: 40, HEARTS: 1, IFRAMES: 0.7, DOWN: 3.5, FLEE: 3, FLEE_SPEED: 260, GAP: 0.5, DRAW: 0.5, AGGRO: 700, LOSE: 4 }, // OFFSET: px between two soldiers on one side of a man; DRAW: a guard draws his sword this long; AGGRO: the most a soldier follows a man; LOSE: a guard with nobody near for this long goes back to his rifle
+      COUNTER: 1, // extra damage on a staggered soldier
+      FLANK: { BONUS: 1 },
+      SQUAD: { FIRST: 2, MAX: 3, REINFORCE: 3.5, BREAK: 4, TEAM: 500, SPAWN_GAP: 0.5 }, // TEAM: crewmen this near the man count for FIRST; SPAWN_GAP: the least time between two soldiers sent
+      GUARD: { MELEE: 150 }, // a vault guard whose man comes this close puts down his rifle and draws his sword
+      SHELL: { R: 110, HP: 2 },
+      REVIVE: { REACH: 110 }, // a crewman on the ground revives a friend who is out cold from this close (hold Action, as aboard)
+      CUE: { BUZZ: [70, 40, 70], NOW: [45], LEAD: 0.2 }, // the phone at a soldier's telegraph: the buzz and flash, and a second short buzz NOW (BLOCK.PARRY + LEAD s before the blow)
+      MOMENTS: { DISARM_AT: 3, PARRY_AT: 3 }, // a Book moment when one man has put this many soldiers down in a stop / parried this many blows
+      BOT: { PARRY: 0.55, BLOCK: 0.8, SWING: 1, SALT: 0 }, // tools: a bot's skill - the share of blows it parries, the share it at least blocks, and whether it swings back (a roll from a hash of the soldier, his swing and SALT: no random numbers)
+    },
   },
   // DERELICTS, STRIPPING AND NAMED PARTS (LOOP.md G5) and the two stops about them (G6: SALVAGE RUN, DEFEND); host/derelicts.js, stopGoals.js, derelictArt.js. ENABLED false (NO_DERELICTS=1 in a tool) = the old game.
   //   A DERELICT is a wrecked airship that drifts slowly in the open sky of some stops (every SALVAGE RUN has three). Its deck is a platform of the away team (3 or more crew, AWAY.MIN_CREW): hook it, drop onto it with a parachute or let the rope
@@ -2553,6 +2580,7 @@ export const config = {
       'creature-lure': 5, 'creature-dodge': 4, 'creature-fled': 10, // C.6f: the Void Eel - the lookout who called the lure, a swallow the helm dodged, the Flagship that fled when the eel died
       'creature-chip': 3, 'creature-thaw': 3, // C.6d: the Rime Wyrm - a hammer chipped the ice off its coil, or thawed a gun it had frozen
       'derelict-boarded': 4, 'derelict-stripped': 5, 'derelict-hauled': 6, 'derelict-rescue': 6, 'named-part': 6, 'salvage-won': 8, 'salvage-lost': 3, 'defend-won': 8, 'defend-lost': 3, 'defend-saved': 5, // G5 / G6: the first man on a wreck, a part unbolted, brought aboard, a sailor freed, a named card bolted on; a salvage run and a defend stop won or lost; a wave beaten off the balloon
+      'duel-disarmed': 6, 'duel-parry': 3, 'duel-flank': 5, 'duel-rescue': 5, // A4: three soldiers put down by one man, three blows parried, a soldier felled by two crew from both sides, a friend revived on the ground
       'helm-held': 5, limp: 5, 'breakoff-bay': 5, breakoff: 4, 'creature-freed': 4, 'revive-fire': 4, rebuild: 3, 'gunship-fled': 3, 'nemesis-down': 10, 'nemesis-won': 9, 'nemesis-escape': 6, 'nemesis-scar': 5, 'nemesis-met': 4, 'boarding-kill': 3, 'cannon-miss': 3, sandbag: 3, 'scrap-first': 3, 'scrap-hook': 3, 'scrap-patch': 7, 'scrap-built': 4, 'frame-built': 6, 'hulk-hauled': 5, 'scrap-dumped': 4, 'escort-crash': 3, 'fire-first': 2, overboard: 2,
     },
     OVERBOARD_PLUS: 1, OVERBOARD_MAX: 4, // an overboard moment weighs WEIGHT.overboard + this per earlier fall of the same person this run, up to this many extra

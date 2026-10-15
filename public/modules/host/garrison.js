@@ -320,6 +320,8 @@ export function createGarrison({ state, puff, credit }) {
           break;
         }
         if (done) break;
+        const D = state.away && state.away.duel; // (A4: the sword fighters are out of their block: a shell bursting at one takes hits off him)
+        if (D && D.shell && D.shell(s)) { s.life = 0; done = true; break; }
         for (const q of f.squads) {
           if (q.state === 'dead' || q.state === 'surrender' || Math.abs(s.x - q.x) > (q.n * SQ.HIT_W) / 2 + 24 || s.y < q.y - 120 || s.y > q.y + 30) continue;
           s.life = 0;
@@ -381,6 +383,8 @@ export function createGarrison({ state, puff, credit }) {
       }
     }
     for (const c of r.gar.chains) if (!c.broken && Math.abs(b.x - c.x) < 90 && b.y > c.yTop && b.y < c.yLow + R) { c.hp -= G.CHAIN.BOMB; if (c.hp <= 0) snap(r, c, 'bombed'); }
+    const D = state.away && state.away.duel; // (A4: the sword fighters in the open die with the bomb)
+    if (D && D.blast && D.blast(b, R)) { state.kills += 1; squads++; r.gar.stats.squadsBombed++; credit?.(b); }
     if (squads) {
       const owner = state.players[b.owner];
       pop(state, b.x, b.y - 170, 'SQUAD DOWN!', '#ffd23f', 1.1);

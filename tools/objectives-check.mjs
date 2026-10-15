@@ -13,6 +13,7 @@
 //   (f) two ships in one sky: only the main ship's men work objectives and are hunted
 //   (g) the bots: a forced trip does each objective end to end; 8 bots on three castles with trips: 0 errors, no NaN
 process.env.NO_ALARMS = '1'; // (the checks read the banner text right after an event; (e) puts the arbiter back for a moment)
+process.env.NO_DUEL = '1'; // (CASTLE.md A4: these are A1's checks - the squad's strike, the shove; the sword fights have their own gate, tools/duel-check.mjs)
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';

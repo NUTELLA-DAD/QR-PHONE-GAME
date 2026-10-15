@@ -52,7 +52,7 @@ export function revived(p) {
   p.koGrace = Math.max(p.koGrace || 0, config.RAIDERS.WAKE_GRACE); // (as when he wakes by himself: a few seconds before the next blow or burn counts)
 }
 
-export function createHealth({ state, ship, phoneFx, emitPlayerUi, shipPuff, shipPop }) {
+export function createHealth({ state, ship, phoneFx, emitPlayerUi, shipPuff, shipPop, worldPuff, worldPop }) {
   const C = () => config.HEALTH;
   const layout = ship.layout;
   // Counters read by tools/botsim.mjs and the --check-health gate: hearts lost by cause, hearts healed (medical bay / bandage / rest), seconds spent burning.
@@ -75,8 +75,9 @@ export function createHealth({ state, ship, phoneFx, emitPlayerUi, shipPuff, shi
     if (!e || e.lost <= 0) return;
     S.lost[e.cause] = (S.lost[e.cause] || 0) + e.lost;
     if (e.ko) S.kos[e.cause] = (S.kos[e.cause] || 0) + 1;
-    shipPuff(p.x, p.y - 60, e.big ? '#ff5a1f' : '#e63946', e.big ? 10 : 5);
-    if (!e.big) shipPop(p.x, p.y - 150, e.cause === 'fire' ? 'burn' : 'hurt', '#e63946', 0.8);
+    const away = !!(p.on && p.on.away && worldPuff); // (A4: a man on the ground is at a world point, not a point of the ship)
+    (away ? worldPuff : shipPuff)(p.x, p.y - 60, e.big ? '#ff5a1f' : '#e63946', e.big ? 10 : 5);
+    if (!e.big) (away ? worldPop : shipPop)(p.x, p.y - 150, e.cause === 'fire' ? 'burn' : 'hurt', '#e63946', 0.8);
     if (!p.bot) emitPlayerUi(p.id, { fx: { toast: e.cause === 'fire' ? 'You are burning! Step away from the fire!' : null, buzz: e.big ? [200, 60, 200] : [90, 40, 90], hit: 1 } });
   };
   const gain = (p, n, how) => {

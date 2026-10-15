@@ -14,6 +14,7 @@
 //   (k) two ships in one sky: only the main ship's crew fetch treasure
 //   (l) the bots: a forced trip fetches a chest end to end; 8 bots on open-sky raids with trips: 0 errors, no NaN
 process.env.NO_ALARMS = '1'; // (the checks read the banner text right after an event)
+process.env.NO_DUEL = '1'; // (CASTLE.md A4: these are A2's checks - the guards' rifles, the shove; the sword fights have their own gate, tools/duel-check.mjs)
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';

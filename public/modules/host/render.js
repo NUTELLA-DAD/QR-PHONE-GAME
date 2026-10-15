@@ -12,6 +12,7 @@ import { createCrewArt } from './crewArt.js';
 import { createCourseArt } from './courseArt.js';
 import { createGroundArt } from './groundArt.js'; // (CASTLE.md A0: the away team's ladders, flares and pickup marker)
 import { createTreasureArt } from './treasureArt.js'; // (CASTLE.md A2: the outposts' vaults, chests and guards)
+import { createDuelArt } from './duelArt.js'; // (CASTLE.md A4: the sword fights - the soldiers, the telegraph, the guard, the blows)
 import { createDerelictArt } from './derelictArt.js'; // (LOOP.md G5 / G6: the wrecks you strip and the stranded balloon)
 import { createRingArt } from './ringArt.js'; // (the orbit finale drawn flat: castle faces, shutters, the ring dial; R0)
 import { createSkyArt } from './skyArt.js';
@@ -143,6 +144,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
   const ringArt = createRingArt({ ctx, state, ink });
   const groundArt = createGroundArt({ ctx, world, ink }); // (CASTLE.md A0: the walkways, the wall ladders, the rope ladder, the flare and the pickup marker)
   const treasureArt = createTreasureArt({ ctx, world, ink }); // (CASTLE.md A2: the vaults, the chests, the guards)
+  const duelArt = createDuelArt({ ctx, world, ink }); // (CASTLE.md A4: the soldiers in a fight, their telegraph, a man's guard, the blows)
   const derelictArt = createDerelictArt({ ctx, world, ink }); // (LOOP.md G5 / G6: the wrecks, their parts, the balloon of a DEFEND stop)
   const spotterArt = createSpotterArt({ ctx, state }); // spotted-target brackets (HELP! call-outs and primed-gun glows are the ships': artsOf)
   const linkArt = createLinkArt({ ctx, state }); // gust / updraft arrows (the loader and lookout wires are the ships': artsOf)
@@ -3655,6 +3657,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
           }
           groundArt.drawObjectives(K8 / 8, zs, (x, y) => { const a = pt(x, y); return a ? { x: a.x, y: a.y, u: zs * 0.85, w: Math.max(0.35, px(x, y)) * 1.1 } : null; }, A3); // (CASTLE.md A1: the objectives' markers, the prisoners and the carried banner, through the camera)
           derelictArt.draw(K8 / 8, zs, (x, y) => { const a = pt(x, y); return a ? { x: a.x, y: a.y, u: zs * 0.85, w: Math.max(0.35, px(x, y)) * 1.1 } : null; }, true); // (G5 / G6: no wreck or balloon model in 3D yet: the HUD draws a stand-in through the camera)
+          duelArt.draw(K8 / 8, zs, (x, y) => { const a = pt(x, y); return a ? { x: a.x, y: a.y, u: zs * 0.85, w: Math.max(0.35, px(x, y)) * 1.1 } : null; }); // (CASTLE.md A4: the soldiers in a sword fight have no 3D swing, block, stagger or lying pose yet: the HUD draws them through the camera)
           treasureArt.draw(K8 / 8, zs, (x, y) => { const a = pt(x, y); return a ? { x: a.x, y: a.y, u: zs * 0.85, w: Math.max(0.35, px(x, y)) * 1.1 } : null; }, !!(p3.treasure && p3.treasure())); // (CASTLE.md A2: the vaults, chests and guards, through the camera; while the 3D view draws the vault, chests and sacks only their words, the grab bar and the guards stay here)
         }
       } catch (e) { /* (a nicety: never stop the frame) */ }
@@ -3956,6 +3959,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       everyShip(() => drawAirborne(ts, view.zoom)); // crew in the air and their ropes live in the world, not in the ship's frame
       groundArt.drawWorld(ts, Math.max(1, Math.min(3, 0.8 / (view.zoom || 0.5)))); // (A0: the walkways, ladders, rope ladder, flares and the pickup marker, in the world)
       treasureArt.draw(ts, Math.max(1, Math.min(3, 0.8 / (view.zoom || 0.5)))); // (A2: the vaults, chests and guards, in the world)
+      duelArt.draw(ts, Math.max(1, Math.min(3, 0.8 / (view.zoom || 0.5)))); // (A4: the soldiers in a sword fight, a man's guard and the blows, in the world)
       drawCross(ts); // (B.6: cannon smoke trails, thrown loads, towlines)
       everyShip(() => { if (!ship.ai) { drawCoil(ts); drawShield(ts); } }); // each ship's Lightning Coil and Deflector band (world points)
       if (fleetN() > 1) fleet.drawPennants(world, wv, width, height, time); // the team flags on the masts
