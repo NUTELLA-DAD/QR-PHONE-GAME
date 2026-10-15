@@ -28,7 +28,10 @@ export function fieldFor(state, stop) {
   return null;
 }
 export const crewCount = (state) => Object.values(state.players).filter((p) => !p.mate && !p.enemy && p.connected !== false).length;
-export const partsNeeded = (state) => (crewCount(state) >= D().RUN.BIG_CREW ? D().RUN.NEED_BIG : D().RUN.NEED); // (parts to bring aboard in a salvage run: one more for a big crew)
+export const partsNeeded = (state, stop) => { // (P5: the raft's Breaker's Yard asks fewer: config.RAFT.YARD)
+  if (stop && stop.yard) { const Y = config.RAFT.YARD; return crewCount(state) >= Y.BIG_CREW ? Y.NEED_BIG : Y.NEED; }
+  return crewCount(state) >= D().RUN.BIG_CREW ? D().RUN.NEED_BIG : D().RUN.NEED;
+}; // (parts to bring aboard in a salvage run: one more for a big crew)
 
 export function createStopGoals({ state, finish, deps }) {
   const stats = { salvageWon: 0, salvageLost: 0, defendWon: 0, defendLost: 0, waves: 0, bites: 0, early: 0 }; // (the tools' tally: it runs on over every map of a run)
@@ -45,8 +48,8 @@ export function createStopGoals({ state, finish, deps }) {
     if (!map || !map.field) return;
     const K = D();
     if (map.field === 'salvage') {
-      const need = partsNeeded(state);
-      c.goal = { kind: 'salvage', need, have: 0, t: K.RUN.TIME, total: K.RUN.TIME, warned: false, done: false, win: false, over: false, at: null, parts: 0 };
+      const yard = !!map.yard, need = partsNeeded(state, yard ? { yard } : null), time = yard ? config.RAFT.YARD.TIME : K.RUN.TIME; // (P5: the Breaker's Yard: fewer parts, a longer storm)
+      c.goal = { kind: 'salvage', need, have: 0, t: time, total: time, yard, warned: false, done: false, win: false, over: false, at: null, parts: 0 };
     } else {
       const s = map.sites[0], DF = K.DEFEND;
       c.goal = { kind: 'defend', t: DF.TIME, total: DF.TIME, hp: DF.HP, max: DF.HP, x: s.x, y: s.y, wave: 0, waveT: DF.WAVES.FIRST, live: false, wait: 0, done: false, win: false, over: false, spot: { x: s.x, y: s.y - 150, r: 95 }, bats: [], clean: 0, hits: 0 };

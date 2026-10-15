@@ -21,7 +21,7 @@ import { hullOrStructure } from './structure.js';
 import { createMatch } from './pvp/match.js';
 import { createShipCollide } from './shipCollide.js';
 import { createTowing } from './towing.js';
-import { createFlotsam, scrapOn, topDeck, holdCount, holdSpend, priceWords, scrapNote } from './scrap.js';
+import { createFlotsam, scrapOn, topDeck, holdCount, holdSpend, holdAdd, priceWords, scrapNote } from './scrap.js';
 import { framesOn, framable, bundlesFor, pendingOf, stepFrames, buildersOf, frameSpot } from './buildFrames.js';
 import { createStopGoals, fieldFor, partsNeeded } from './stopGoals.js'; // (LOOP.md G6: the salvage run and the DEFEND stop)
 import { stepThrown, cargoItem } from './cargo.js';
@@ -29,7 +29,8 @@ import { stepMines } from './minefield.js';
 import { stepFlak } from './weapons.js';
 import { gunStock } from './gunTypes.js';
 import { newBot } from './network.js';
-import { BUILDS } from './shipBuild.js';
+import { BUILDS, buildLayout } from './shipBuild.js';
+import { routePipes } from './buildSlots.js';
 import { powerRatio } from './shipPower.js';
 import { offerPart, partPrice, moduleNames, newModules, summaryOf, choiceScore, choicesFor, entryById, gasTopUpCost, gasOffer } from './partsShop.js';
 import { setGas } from './buildEdit.js';
@@ -661,12 +662,13 @@ export function createSimulation() {
   const newRun = () => {
     const prevLost = state.run && state.run.lost && state.run.lost.length ? state.run.lost[0] : null; // (a ship that had lost parts: the voyage starts again with her whole)
     const daily = state.daily ? dailyVoyage() : null;
-    const voyage = generateVoyage(daily ? daily.seed : (Math.random() * 2 ** 31) | 0, { mode: state.mode, gentle: !!state.startBuild && state.startBuild !== 'classic', classic: state.startBuild === 'classic', firstEver: daily ? false : !(state.save.totalRuns > 0) }); // (P1: this TV's first-ever voyage meets the Titan as a tutorial; after that the opening is rolled - and the daily route, which everyone shares, always is)
+    const voyage = generateVoyage(daily ? daily.seed : (Math.random() * 2 ** 31) | 0, { mode: state.mode, gentle: !!state.startBuild && state.startBuild !== 'classic', classic: state.startBuild === 'classic', raft: state.startBuild === 'raft', firstEver: daily ? false : !(state.save.totalRuns > 0) }); // (P1: this TV's first-ever voyage meets the Titan as a tutorial; after that the opening is rolled - and the daily route, which everyone shares, always is)
     const first = voyage.columns[0][0];
     const M = modeInfo(state.mode);
     state.run = { voyage, stopId: first.id, visited: [first.id], salvage: 0, earned: 0, gain: {}, gunships: 0, kills: 0, crew: {}, bought: [], spares: sparesFor(state), sparesMax: sparesFor(state), limps: 0,
       mode: state.mode, key: sessionKey(), daily: daily && { key: daily.key, name: daily.name }, voyageNo: 1, voyages: M.voyages, base: 0, rival: M.rival,
       build: null, parts: [], lastPart: null, lost: [], trophy: null, log: [], lastLog: null, frames: [] }; // (frames: G4, buildFrames.js - parts bought as a scaffold and still to be built, or built; log: the Ship's Book - one writeStop() result for each stop flown, oldest first; lastLog: the newest, which the sky-dock shows. trophy: a slain creature's part card still to be offered at a dock, config.CREATURES.REWARD; build: this voyage's ship as a parts list; parts: what the crew has bought, newest last: { id, name, names, bag }; lastPart: the card of the last dock; lost: parts that broke off in flight and are not rebuilt yet, oldest first, S.5i)
+    state.run.raft = state.startBuild === 'raft' && config.RAFT.ENABLED; // (P5: this voyage starts on the raft: the gift at cast off, the Breaker's Yard, the raft's docks and danger scale)
     const start = state.startBuild && BUILDS[state.startBuild];
     state.run.build = copyData(start || (prevLost ? prevLost.before : layout.parts) || BUILDS.classic);
     if (start && main.buildId !== state.startBuild) fitShip(state.run.build, state.startBuild); // (a new voyage starts with the start build, whatever the last one grew into)
@@ -685,7 +687,8 @@ export function createSimulation() {
   // F1: the start ship that fits the crew on the TV now (config.VOYAGE.START_BUILD_BY_CREW): the Sparrow for a crew of max or fewer, the classic ship for a bigger one. Mates do not count.
   const pickStartBuild = () => {
     const B = VY.START_BUILD_BY_CREW;
-    return Object.values(state.players).filter((p) => !p.mate && p.connected !== false).length <= B.max ? B.small : B.big;
+    const id = Object.values(state.players).filter((p) => !p.mate && p.connected !== false).length <= B.max ? B.small : B.big;
+    return id === 'raft' && !config.RAFT.ENABLED ? 'sparrow' : id; // (P5: the raft is the small crews' ship; RAFT.ENABLED false = the Sparrow, as before)
   };
   const nemesis = createNemesis({ state, persist: () => saveVoyageSave(state.save), dateKey, addSalvage: (...a) => addSalvage(...a), phoneFx: (...a) => phoneFx(...a), hullNow: () => hullOrStructure(state.ship), stopNameOf: (id) => { const s = id && state.run ? stopById(state.run.voyage, id) : null; return s ? stopName(s) : ''; } }); // (L4: nemesis.js - dormant unless config.NEMESIS.ENABLED)
   let lastFilm = null; // L7: the clip closeStop took for the scorecard stopDone is about to raise
@@ -743,13 +746,13 @@ export function createSimulation() {
   };
 
   // What a stop asks of the course (see startMission in course.js).
-  const goalOf = (stop, field) => (field === 'defend' ? 'DEFEND THE BALLOON - HOLD ' + config.DERELICT.DEFEND.TIME + ' SECONDS' : field === 'salvage' ? 'SALVAGE RUN - STRIP ' + partsNeeded(state) + ' PARTS FROM THE WRECKS' : stop.flagship ? 'SINK THE FLAGSHIP' : stop.lair ? 'SLAY THE ' + (stop.creature === 'eel' ? 'VOID EEL' : stop.creature === 'mother' ? 'MYCELIAL MOTHER' : stop.creature === 'wyrm' ? 'RIME WYRM' : stop.creature === 'titan' ? 'ISLAND TITAN' : stop.creature === 'thunderbird' ? 'THUNDERBIRD' : stop.creature === 'drake' ? 'DRAKE' : 'KRAKEN') : stop.salvage ? 'SALVAGE RUN - REACH THE BEACON' : stop.kind === 'ring' ? 'BREACH THE ' + ({ tower: 'TOWER', fortress: 'FORTRESS', citadel: 'CITADEL' }[stop.ring] || 'CASTLE') : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON');
+  const goalOf = (stop, field) => (field === 'defend' ? 'DEFEND THE BALLOON - HOLD ' + config.DERELICT.DEFEND.TIME + ' SECONDS' : field === 'salvage' ? (stop.yard ? 'BUILD YOUR ENGINE AND GUN, THEN STRIP ' + partsNeeded(state, stop) + ' PARTS FROM THE WRECKS' : 'SALVAGE RUN - STRIP ' + partsNeeded(state) + ' PARTS FROM THE WRECKS') : stop.flagship ? 'SINK THE FLAGSHIP' : stop.lair ? 'SLAY THE ' + (stop.creature === 'eel' ? 'VOID EEL' : stop.creature === 'mother' ? 'MYCELIAL MOTHER' : stop.creature === 'wyrm' ? 'RIME WYRM' : stop.creature === 'titan' ? 'ISLAND TITAN' : stop.creature === 'thunderbird' ? 'THUNDERBIRD' : stop.creature === 'drake' ? 'DRAKE' : 'KRAKEN') : stop.salvage ? 'SALVAGE RUN - REACH THE BEACON' : stop.kind === 'ring' ? 'BREACH THE ' + ({ tower: 'TOWER', fortress: 'FORTRESS', citadel: 'CITADEL' }[stop.ring] || 'CASTLE') : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON');
   const missionOpts = (stop, field = fieldFor(state, stop)) => ({ // (field: G6, 'salvage' | 'defend' = this stop is flown on an open FIELD map, stopGoals.js; null = the stop as it always was)
     environment: stop.play,
     kind: stop.kind === 'defend' && !field ? 'route' : stop.kind,
     field,
     danger: stop.danger,
-    stop: { id: stop.id, col: stop.col, name: stopName(stop), env: stop.env, reward: stop.reward, flagship: stop.flagship, lair: !!stop.lair || (config.CREATURES.DEV_LAIR && !stop.flagship), creature: stop.creature || (config.CREATURES.DEV_LAIR && !stop.flagship ? config.CREATURES.DEV_LAIR_AS || config.CREATURES.LAIR.BY_ENV[config.ENVIRONMENTS.FORCE || stop.play] || 'kraken' : undefined), gates: stop.gates, ring: stop.ring, nemesis: stop.nemesis, multi: stop.multi, salvage: stop.salvage, defend: stop.defend, field, rateMul: field === 'salvage' ? config.DERELICT.RUN.RATE_MUL : field === 'defend' ? config.DERELICT.DEFEND.RATE_MUL : stop.salvage ? VY.CURRICULUM.SALVAGE.RATE_MUL : undefined, slack: stop.slack, early: stop.early }, // (slack: F1, a small ship's early caves are wider; early: the classic ship's stop 1 may call the planes at its first set piece; gates... rateMul: the teaching curriculum's set-piece gates, ring / Nemesis / multi-part flags and the salvage run's lighter enemies, config.VOYAGE.CURRICULUM; lair: a giant creature waits here, creatureSystem.js raises it at the zeppelin boss's slot; DEV_LAIR: every stop is one; creature: 'kraken' | 'drake', by the sky)
+    stop: { id: stop.id, col: stop.col, name: stopName(stop), env: stop.env, reward: stop.reward, flagship: stop.flagship, lair: !!stop.lair || (config.CREATURES.DEV_LAIR && !stop.flagship), creature: stop.creature || (config.CREATURES.DEV_LAIR && !stop.flagship ? config.CREATURES.DEV_LAIR_AS || config.CREATURES.LAIR.BY_ENV[config.ENVIRONMENTS.FORCE || stop.play] || 'kraken' : undefined), gates: stop.gates, ring: stop.ring, nemesis: stop.nemesis, multi: stop.multi, salvage: stop.salvage, defend: stop.defend, yard: stop.yard, field, rateMul: field === 'salvage' ? (stop.yard ? config.RAFT.YARD.RATE_MUL : config.DERELICT.RUN.RATE_MUL) : field === 'defend' ? config.DERELICT.DEFEND.RATE_MUL : stop.salvage ? VY.CURRICULUM.SALVAGE.RATE_MUL : undefined, slack: stop.slack, early: stop.early }, // (slack: F1, a small ship's early caves are wider; early: the classic ship's stop 1 may call the planes at its first set piece; gates... rateMul: the teaching curriculum's set-piece gates, ring / Nemesis / multi-part flags and the salvage run's lighter enemies, config.VOYAGE.CURRICULUM; lair: a giant creature waits here, creatureSystem.js raises it at the zeppelin boss's slot; DEV_LAIR: every stop is one; creature: 'kraken' | 'drake', by the sky)
     lengthMul: modeInfo(state.run.mode).lengthMul,
     title: `STOP ${stopNo(state.run, stop)}: ${stopName(stop).toUpperCase()} - ${goalOf(stop, field)}!`,
     goal: goalOf(stop, field), // (F6: the BRIEFING card's one line)
@@ -936,9 +939,11 @@ export function createSimulation() {
     if (!state.startBuild) return null; // (headless tools without a start build keep the old shop)
     if (state.run.lost && state.run.lost.length) return null; // (no new parts for a ship with sections missing: rebuild first - the REBUILD cards)
     const run = state.run, found =PS.DERELICT_STOPS.includes(legNo(curStop()));
-    if (!found && !state.yardOnly && Math.random() >= (SH.V2 ? SH.V2_PART_CHANCE : PS.CARD_CHANCE)) return null; // (not every dock has a part for sale)
+    const plan = run.raft && !state.yardOnly && !found ? raftPlan() : null; // (P5: a raft is offered the things that grow her first, in the order of RAFT.DOCK.PLAN)
+    if (!found && !state.yardOnly && !plan && Math.random() >= (SH.V2 ? SH.V2_PART_CHANCE : PS.CARD_CHANCE)) return null; // (not every dock has a part for sale)
     const ahead = run.voyage.columns.slice(curStop().col + 1).flat(); // (what is still on the route: raids need a bomb bay, the Aether is the Flagship's sky)
-    const offer = offerPart(run.build, { owned: ownedParts(), crew: crewHeads(state), avoid: run.lastPart, only: state.yardOnly || null, route: { raids: ahead.filter((x) => x.kind === 'open' || (config.RING.FAIR.ENABLED && x.ring)).length, aether: ahead.some((x) => x.env === 'aether') } });
+    const ask = { owned: ownedParts(), crew: crewHeads(state), avoid: run.lastPart, only: state.yardOnly || plan || null, route: { raids: ahead.filter((x) => x.kind === 'open' || (config.RING.FAIR.ENABLED && x.ring)).length, aether: ahead.some((x) => x.env === 'aether') } };
+    const offer = offerPart(run.build, ask) || (plan ? offerPart(run.build, { ...ask, only: null }) : null);
     if (!offer) return null;
     const e = offer.entry;
     run.lastPart = e.id;
@@ -1005,7 +1010,7 @@ export function createSimulation() {
   // The frame card twins the part card: the same part and places, a share of the salvage and no bundles at the dock (the crew carry them). null: frames off, no part card, a big part, a free one, or one frame is waiting already.
   const frameCard = (o) => { // (G5: a named part can be built as a frame too: its twin keeps its name and its story)
     const F = config.FRAMES, base = o.base || o.cost;
-    if (!framesOn() || o.kind !== 'part' || o.trophy || o.derelict || !(base > 0) || !framable(o.entry) || pendingOf(state).length >= F.MAX_PENDING) return null;
+    if (!framesOn() || o.kind !== 'part' || o.trophy || o.derelict || !(base > 0) || !framable(o.entry) || pendingOf(state).length >= pendingMax()) return null;
     const need = bundlesFor(base);
     return { ...o, id: 'frame-' + o.entry, frame: true, need, base, name: `${o.named ? o.name : o.baseName} (FRAME)`, icon: '\u{1F3D7}\u{FE0F}', desc: `Built in flight: carry ${need} scrap to its frame and it comes alive.`, cost: Math.round((base * F.CASH_SHARE) / 5) * 5,
       scrap: undefined, scrapPay: undefined, cashFull: undefined, each: undefined, badge: 'FRAME: BUILD IT IN FLIGHT' };
@@ -1013,6 +1018,10 @@ export function createSimulation() {
   // The parts list with the frame's part on it. Usually the one the crew chose at the Yard; if she has changed since (parts broke off, another part was bought) the place is cut again on what she is now and must be near the old one.
   const framePlan = (f) => {
     if (JSON.stringify(layout.parts) === f.baseKey) return f.parts;
+    if (f.add && f.add.length) { // (P5: a gift frame: its own parts on top of what she is now - the pipes are routed again - if that still validates)
+      const next = routePipes([...layout.parts.map((q) => ({ ...q })), ...f.add.map((q) => ({ ...q }))]);
+      if (validate(next).ok) return next;
+    }
     const e = entryById(f.entry);
     if (!e) return null;
     let best = null;
@@ -1031,7 +1040,7 @@ export function createSimulation() {
   const placeFrame = (o, c) => {
     const run = state.run;
     const f = { id: (run.frameSeq = (run.frameSeq || 0) + 1), entry: o.entry, name: o.baseName, need: o.need, fill: 0, prog: 0, x: c.x, y: c.y, where: c.where, letter: c.letter, ghost: c.ghost || null, paid: o.paid || 0,
-      baseKey: JSON.stringify(layout.parts), parts: c.parts, by: {}, ok: true, done: false, v: layout.version, lostN: (run.lost || []).length, stop: run.stopId, named: o.named || null };
+      baseKey: JSON.stringify(layout.parts), parts: c.parts, by: {}, ok: true, done: false, v: layout.version, lostN: (run.lost || []).length, stop: run.stopId, named: o.named || null, ...(o.gift ? { gift: true, add: c.add || null } : {}) }; // (P5: a gift frame of the raft keeps the parts it adds, so framePlan can raise it on whatever she has become)
     (run.frames ||= []).push(f);
     if (o.named && run.derelict) { const at = run.derelict.pending.indexOf(o.named); if (at >= 0) run.derelict.pending.splice(at, 1); } // (G5: a named part bought as a frame is paid for: it no longer waits)
     Object.assign(state.yard, { built: { t: YD.BUILT_STAMP, name: o.baseName, letter: c.letter, where: c.where, frame: true } });
@@ -1085,6 +1094,55 @@ export function createSimulation() {
     }
   };
 
+  // ---- THE RAFT (PLAYTEST1.md P5, config.RAFT, shipBuild.js BUILDS.raft) ----
+  // At CAST OFF a raft voyage is handed two empty FRAMES (RAFT.GIFT: an engine pod on the aft Yard place, a gun on the fore one) and a purse of scrap in the hold (RAFT.START_SCRAP): the crew carry the scrap to the frames and build them.
+  // Each gift frame keeps what it adds (f.add), so it can still be raised after the other has come alive (framePlan). With frames off (a Node tool without SCRAP_ON) the two parts are simply built already: the raft still flies.
+  const crewNow = () => Math.max(1, Object.values(state.players).filter((p) => !p.mate && !p.enemy && p.connected !== false).length); // (people and bots: who is aboard)
+  const raftPendingMax = () => { const F = config.RAFT.FRAMES_PENDING, crew = crewNow(); let n = 1; for (const k of Object.keys(F).map(Number).sort((a, b) => a - b)) if (crew >= k) n = F[k]; return n; }; // (frames waiting at once by crew size)
+  const pendingMax = () => (state.run && state.run.raft ? Math.max(config.FRAMES.MAX_PENDING, raftPendingMax()) : config.FRAMES.MAX_PENDING);
+  const dockCards = () => (state.run && state.run.raft ? (crewNow() >= config.RAFT.DOCK.BIG_CREW ? config.RAFT.DOCK.CARDS_BIG : config.RAFT.DOCK.CARDS) : 4); // (cards a dock may show, Cast off included: the phone's grid takes 5 for a big crew)
+  const raftPlan = () => { // (the part this dock of a raft voyage should offer: the first of RAFT.DOCK.PLAN from this dock's number on that she can still take)
+    const owned = ownedParts();
+    for (const id of config.RAFT.DOCK.PLAN.slice(Math.max(0, curStop().col))) { const e = entryById(id); if (e && e.allowed(state.run.build, owned)) return id; }
+    return null;
+  };
+  const namedMax = () => (state.run && state.run.raft ? (crewNow() >= config.RAFT.DOCK.BIG_CREW ? config.RAFT.DOCK.NAMED_BIG : config.RAFT.DOCK.NAMED) : 2);
+  // One gift part: the Yard place of that part nearest the end the config names (a candidate the validator accepts), as the choice placeFrame / buildPart take, or null.
+  const giftPlace = (parts, id) => {
+    const e = entryById(id), R = config.RAFT;
+    let L;
+    try { L = buildLayout(parts); } catch { return null; }
+    const cands = e.cands(parts, L).sort((a, b) => (R.GIFT_AT[id] === 'aft' ? a.x - b.x : b.x - a.x));
+    for (const c of cands) {
+      let next;
+      try { next = c.apply(parts); } catch { continue; }
+      if (!next || JSON.stringify(next) === JSON.stringify(parts) || !validate(next).ok) continue;
+      const had = new Set(parts.map((q) => JSON.stringify(q)));
+      return { x: c.x, y: c.y, where: c.where, letter: 'A', ghost: c.ghost || null, parts: next, add: next.filter((q) => q.part !== 'pipe' && !had.has(JSON.stringify(q))) };
+    }
+    return null;
+  };
+  const raftGift = () => {
+    const run = state.run, R = config.RAFT;
+    if (!run || !run.raft || run.gifted) return;
+    run.gifted = true;
+    const crew = crewNow();
+    const got = scrapOn() ? holdAdd(state, Math.min(config.SCRAP.HOLD_CAP, R.START_SCRAP.BASE + Math.floor(crew * R.START_SCRAP.PER_CREW))) : 0;
+    run.giftScrap = got;
+    for (const id of R.GIFT) {
+      const e = entryById(id), c = e && giftPlace(run.build, id);
+      if (!c) continue; // (no room: she goes without; the dock will sell it)
+      if (framesOn()) placeFrame({ entry: id, baseName: e.name, need: R.GIFT_NEED[id], paid: 0, gift: true }, c);
+      else { // (no scrap, no frames: the part is simply built)
+        const before = moduleNames(layout);
+        run.build = c.parts;
+        fitShip(run.build, 'yard');
+        run.parts.push({ id, name: e.name, names: newModules(before, moduleNames(layout)), bag: false, gift: true });
+      }
+    }
+    if (framesOn() && (run.frames || []).length) state.say('info', `YOUR RAFT: CARRY SCRAP TO THE FRAMES AND BUILD HER ENGINE AND GUN! (${got} BUNDLES IN THE HOLD)`, null, 6);
+  };
+
   // A limp home shakes the newest part loose: its modules start broken (a hammer mends them), a new gasbag starts with a hole. No part is ever lost. Returns its name.
   const shakeLoose = (run) => {
     const last = run.parts[run.parts.length - 1];
@@ -1135,9 +1193,11 @@ export function createSimulation() {
     if (mend) offers.push(mend);
     const open = SH.V2_FITTINGS.map((id) => UPGRADES.find((u) => u.id === id)).filter((u) => u && (state.upgrades[u.id] || 0) < u.max);
     const lost = state.run.lost || [];
-    const big = (lost.length ? rebuildCard(lost[0], 0) : null) || trophyCard() || namedCard(0) || partCard(); // (G5: a part stripped off a wreck comes before a random one)
+    const raft = !!state.run.raft && !lost.length;
+    const big = (lost.length ? rebuildCard(lost[0], 0) : null) || trophyCard() || (raft ? partCard() : null) || namedCard(0) || partCard(); // (G5: a part stripped off a wreck comes before a random one; P5: the raft's planned card, the one that grows her, comes before both)
     if (big) offers.push(big);
-    { const second = big && big.named ? namedCard(1) : null; if (second) offers.push(second); } // (...and a second one, if two were stripped)
+    if (big && big.named) { for (let k = 1; k < namedMax(); k++) { const more = namedCard(k); if (more) offers.push(more); } } // (...and a second one, if two were stripped)
+    else if (raft && big) for (let k = 0; k < namedMax(); k++) { const more = namedCard(k); if (!more) break; offers.push(more); } // (P5: the stripped parts' cards sit beside the planned one)
     while (offers.length < SH.V2_OFFERS - 1 && open.length) {
       const u = open.splice((Math.random() * open.length) | 0, 1)[0];
       offers.push({ id: u.id, kind: 'upgrade', name: u.name, icon: u.icon, desc: u.desc, cost: upgradePrice(u), level: (state.upgrades[u.id] || 0) + 1, max: u.max });
@@ -1165,8 +1225,15 @@ export function createSimulation() {
   const buildOffers = () => {
     const offers = buildOffersRaw();
     offers.forEach(priceInScrap);
-    { const at = offers.findIndex((o) => o.kind === 'part'), fc = at >= 0 ? frameCard(offers[at]) : null; if (fc) offers.splice(at + 1, 0, fc); } // (G4: the part card's twin, bought as a frame)
-    while (offers.length > 4) { const k = offers.map((o, i) => (o.named && i > 0 && offers.findIndex((x) => x.named) !== i ? i : -1)).filter((i) => i >= 0).pop(); if (k === undefined) break; offers.splice(k, 1); } // (G5: never more than 4 cards - the phone's grid: a second named part waits for the next dock)
+    { const parts = offers.map((o, i) => i).filter((i) => offers[i].kind === 'part'); for (const at of state.run.raft ? parts : parts.slice(0, 1)) { const fc = frameCard(offers[at]); if (fc) { offers.splice(at + 1, 0, fc); break; } } } // (G4: the part card's twin, bought as a frame; P5: on the raft the first part card that can be built has one - the planned hull bay cannot)
+    const cap = dockCards();
+    if (state.run.raft) while (offers.length > cap) { // (P5: the raft's dock shows 4 cards - 5 for a crew of 10 or more: fittings go first, then a second stripped card, then the frame twin)
+      const last = (test) => { for (let i = offers.length - 1; i >= 0; i--) if (test(offers[i], i)) return i; return -1; };
+      const k = [last((o) => o.kind === 'upgrade'), last((o, i) => o.named && i > offers.findIndex((x) => x.named)), last((o) => o.frame)].find((i) => i >= 0);
+      if (k === undefined) break;
+      offers.splice(k, 1);
+    }
+    while (offers.length > cap) { const k = offers.map((o, i) => (o.named && i > 0 && offers.findIndex((x) => x.named) !== i ? i : -1)).filter((i) => i >= 0).pop(); if (k === undefined) break; offers.splice(k, 1); } // (G5: never more than 4 cards - the phone's grid: a second named part waits for the next dock)
     return offers;
   };
   const buildOffersRaw = () => {
@@ -1249,7 +1316,7 @@ export function createSimulation() {
     const next = stop.next.map((id) => stopById(run.voyage, id));
     if (!next.length || next.some((s) => s.salvage) || run.power >= expectedPower(next[0]) - CU.SALVAGE.SLACK) return;
     if (next[0].col < CU.SALVAGE.FROM_COLUMN) return; // (F1: never before the third column...)
-    if (CU.SALVAGE.MAX_PER_VOYAGE && run.voyage.columns.flat().filter((s) => s.salvage).length >= CU.SALVAGE.MAX_PER_VOYAGE) return; // (...and at most one a voyage, so the curriculum, the lairs and the fortress arrive)
+    if (CU.SALVAGE.MAX_PER_VOYAGE && run.voyage.columns.flat().filter((s) => s.salvage && !s.yard).length >= CU.SALVAGE.MAX_PER_VOYAGE) return; // (...and at most one a voyage, so the curriculum, the lairs and the fortress arrive)
     const pick = next.filter((s) => !s.lair && !s.ring && !s.flagship && !s.harbour).sort((a, b) => a.danger - b.danger)[0];
     if (!pick) return;
     pick.salvage = true;
@@ -1313,6 +1380,7 @@ export function createSimulation() {
     if (toHelium != null && state.gasStats && state.gasStats.scorched > 0) return toHelium;
     const part = ok.find((i) => v.options[i].kind === 'part' && !v.options[i].frame);
     const frame = ok.find((i) => v.options[i].frame); // (G4: the part bought as a frame - only when the plain card is out of the crew's reach: a bot crew never gives up a part it can pay for now for one it has to build)
+    if (frame != null && state.run.raft && Math.random() < config.RAFT.BOTS.PREFER) return frame; // (P5: a raft's crew builds whatever it can: it has the scrap and the hands, and the frame is the cheaper card)
     if (frame != null && (part == null ? Math.random() < config.FRAMES.BOTS.BUY : v.options[part].scrapPay < v.options[part].scrap && Math.random() < config.FRAMES.BOTS.PREFER)) return frame;
     if (part != null && Math.random() < Math.max(v.options[part].rec ? YD.BOT_REC_CHANCE : YD.BOT_PART_CHANCE, v.options[part].scrap && v.options[part].scrapPay >= v.options[part].scrap ? config.SCRAP.PRICE.BOT_BUY : 0)) return part; // (G2: a card the hold pays in bundles is a bargain) // (a crew that can afford a part card likes to build)
     if (Math.random() < SH.BOT_CAST_CHANCE) return cast;
@@ -1738,6 +1806,7 @@ export function createSimulation() {
   // CAST OFF without the voyage's rules (the voyage starts a map when the lobby changed the session: Versus has its own sky): the crew factors settle, the ships fly.
   const launch = () => {
     eachShip(state, (sh) => updateCrewScale(sh.ctx, 0)); // (settle the spare gasbags and crew factors for the chosen difficulty)
+    raftGift(); // (P5: a raft voyage is handed its two frames and a purse of scrap as she casts off)
     state.phase = 'flying';
     state.say('objective', 'CAST OFF!', null, 4);
   };
@@ -1778,6 +1847,10 @@ export function createSimulation() {
       if (state.startBuildAuto && VY.START_BUILD_BY_CREW.ENABLED && state.startBuild !== pickStartBuild()) { // (F1: nobody forced a ship, so the crew on the TV picks it: the route and the first map are made again for her)
         state.startBuild = pickStartBuild();
         newRun();
+        course.startMission(1, firstMission());
+        remade = true;
+      }
+      if (!remade && state.run.raft && !state.run.gifted && state.run.key === sessionKey()) { // (P5: the Breaker's Yard is a field map for a crew of AWAY.MIN_CREW or more: the first map is made again now that the crew is here)
         course.startMission(1, firstMission());
         remade = true;
       }
@@ -1824,6 +1897,7 @@ export function createSimulation() {
     // how = 'auto': nobody forced this ship, so CAST OFF may swap it for the one that fits the crew (F1, START_BUILD_BY_CREW); any other call (the Ship button, a tool, the build page) forces it.
     setStartBuild: (id, how) => {
       if (id != null && !BUILDS[id]) return;
+      if (id === 'raft' && !config.RAFT.ENABLED) id = 'sparrow'; // (P5: no raft with the switch off)
       state.startBuild = id || null;
       state.startBuildAuto = how === 'auto' && !!id && id !== 'playtest';
       if (state.phase === 'lobby' && !match.on) {

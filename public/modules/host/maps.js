@@ -18,11 +18,11 @@ export function shipBox(layout) {
 
 // A SALVAGE RUN (voyage.js, simulation.js markSalvage; config.VOYAGE.CURRICULUM.SALVAGE): the catch-up stop of a crew that is behind. For now it is flown on the map kind SALVAGE.MAP (a pass: no outposts, a beacon
 // at the end, so even a ship with no bomb bay can finish it) a level lower, and the map is flagged map.salvage; package G6 gives it a real objective.
-export function makeMap(kind, level, rand, lengthMul = 1, layout, creature = null, variant = null, slack = null, field = null) { // (variant: which ring a 'ring' map is, 'tower' | 'fortress' | 'citadel'; slack: F1, squares of spare room in a cave's tunnels and shafts instead of config.MAPS.TUNNEL_SLACK / SHAFT_SLACK; field: G6, 'salvage' | 'defend' = the open FIELD map of a salvage run (wrecks to strip) or a DEFEND stop (a balloon), buildFieldMap below)
+export function makeMap(kind, level, rand, lengthMul = 1, layout, creature = null, variant = null, slack = null, field = null, yard = false) { // (yard: P5, the raft's Breaker's Yard = a salvage field with its first wreck close to the start, config.RAFT.YARD; variant: which ring a 'ring' map is, 'tower' | 'fortress' | 'citadel'; slack: F1, squares of spare room in a cave's tunnels and shafts instead of config.MAPS.TUNNEL_SLACK / SHAFT_SLACK; field: G6, 'salvage' | 'defend' = the open FIELD map of a salvage run (wrecks to strip) or a DEFEND stop (a balloon), buildFieldMap below)
   if (field) {
     let map = null;
     for (let tries = 0; tries < 12; tries++) { // (built again, barer, if the rock shut a site in)
-      map = buildFieldMap(Math.max(1, level - (field === 'salvage' ? config.VOYAGE.CURRICULUM.SALVAGE.LEVEL_DROP : 0)), rand, lengthMul, layout, field, tries);
+      map = buildFieldMap(Math.max(1, level - (field === 'salvage' ? config.VOYAGE.CURRICULUM.SALVAGE.LEVEL_DROP : 0)), rand, lengthMul, layout, field, tries, yard);
       if (map.startDist < 1e9) return map;
     }
     return map;
@@ -273,13 +273,13 @@ function buildOpenMap(level, rand, lengthMul = 1, layout) {
 
 // A wreck's place (G5): near column kx of a finished open map, the cell { i, jr } at row row0 or below (down to half the map) where the SHIP can hover (map.fit, reachable by map.dist) with a wreck's deck config.DERELICT.HOVER_REF px
 // under her reference point and free air round the hull; null if there is none within 10 columns. No random numbers.
-export function findHover(map, kx, row0) {
+export function findHover(map, kx, row0, minI = 30) { // (minI: the nearest column to the start a wreck may hang at; P5's first wreck of the Breaker's Yard hangs much closer)
   const D = config.DERELICT, C = map.CELL, W = map.W, H = map.H, idx = (i, j) => j * W + i;
   const down = Math.round(D.HOVER_REF / C), half = Math.ceil(D.W[1] / 2 / C) + 1;
   for (let d = 0; d <= 10; d++) {
     for (const sgn of d ? [1, -1] : [1]) {
       const i = kx + sgn * d;
-      if (i < 30 || i > W - 12) continue;
+      if (i < minI || i > W - 12) continue;
       for (let jr = row0; jr <= Math.round(H * 0.5); jr++) {
         if (!map.fit[idx(i, jr)] || map.dist[idx(i, jr)] >= 1e9) continue;
         const dj = jr + down;
@@ -295,8 +295,8 @@ export function findHover(map, kx, row0) {
 // A FIELD map (LOOP.md G6, config.DERELICT.RUN / .DEFEND, stopGoals.js): open sky with rolling hills and a few floating islands and NO outposts or guns, for a SALVAGE RUN (field 'salvage': wrecks hang at map.sites, the crew strips them) or a
 // DEFEND stop (field 'defend': a stranded balloon hangs at the one site). map.sites = [ { x, y (the deck / the basket, px), hx, hy (the cell the ship hovers at to work it) } ]; each site has open air for the hull and a way there for
 // the ship (map.fit, map.dist), checked here; the route's goal starts at the first site (stopGoals.js moves it). Draws no random numbers beyond the hills and islands. startDist >= 1e9 = a site was shut in: built again, barer.
-function buildFieldMap(level, rand, lengthMul = 1, layout, field, tries = 0) {
-  const M = config.MAPS, D = config.DERELICT, F = field === 'salvage' ? D.RUN.FIELD : D.DEFEND.FIELD, C = M.CELL;
+function buildFieldMap(level, rand, lengthMul = 1, layout, field, tries = 0, yard = false) {
+  const M = config.MAPS, D = config.DERELICT, F = field === 'salvage' ? (yard ? { ...D.RUN.FIELD, AT: config.RAFT.YARD.AT } : D.RUN.FIELD) : D.DEFEND.FIELD, C = M.CELL; // (P5: the Breaker's Yard hangs its first wreck within reach of a raft that has no engine yet)
   const r = (a, b) => a + rand() * (b - a);
   const ri = (a, b) => Math.floor(r(a, b + 1));
   const W = Math.max(70, Math.round(F.WIDTH * lengthMul));
@@ -318,11 +318,11 @@ function buildFieldMap(level, rand, lengthMul = 1, layout, field, tries = 0) {
       if (u * u + v * v <= 1) solid[idx(i, j)] = 1;
     }
   }
-  const map = { kind: 'field', level, CELL: C, W, H, solid, turrets: [], outposts: [], open: true, field, salvage: field === 'salvage', sites: [] };
+  const map = { kind: 'field', level, CELL: C, W, H, solid, turrets: [], outposts: [], open: true, field, salvage: field === 'salvage', sites: [], ...(yard ? { yard: true } : {}) };
   finishMap(map, { i: 12, j: H - 14 }, { i: Math.round(W * 0.4), j: Math.round(H * 0.38) }, layout); // (a stand-in goal: the sites are looked for on the field of cells the ship can reach)
   if (!(map.startDist < 1e9)) return map;
   for (const kx of keep) {
-    const site = findHover(map, kx, Math.round(H * 0.3) + ri(0, 6)); // (each wreck hangs at its own height)
+    const site = findHover(map, kx, Math.round(H * 0.3) + ri(0, 6), yard && kx === keep[0] ? config.RAFT.YARD.FIRST_MIN_COL : 30); // (each wreck hangs at its own height; the Breaker's Yard's first one close to the start)
     if (!site) { map.startDist = Infinity; return map; }
     const x = (site.i + 0.5) * C, hy = (site.jr + 0.5) * C;
     let hx = x;

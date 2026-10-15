@@ -558,13 +558,22 @@ function scrapJobs(state, bot, patching = false) {
 }
 // FRAMES (config.FRAMES, LOOP.md G4): bots build only in a CALM - the tempo's calm or escape, no set piece, no fall, no raiders aboard, no fire burning, no gunship hunting, no live creature - so the gunners and the stokers are never short of hands in a crisis.
 function frameCalm(state) {
+  const R = config.RAFT;
+  if (R.ENABLED && state.run && state.run.raft && mainShip(state).layout.stations.filter((s) => s.kind === 'gun').length < R.BOTS.BUILD_ANY_PHASE_UNTIL_GUNS) return calmFor(state, ['build', 'peak', 'calm', 'escape']); // (P5: a raft with no gun cannot wait for a quiet sky to build one: any phase of the pacing, but still never in a fall, with raiders aboard, a fire, a gunship or a creature)
   return calmFor(state, config.FRAMES.BOTS.ALLOW);
 }
 // The build job a bot may take now (one frame at a time), or null.
 function frameJob(state) {
   if (!framesOn() || !frameCalm(state)) return null;
-  const f = pendingOf(state).find((q) => q.ok !== false);
-  return f ? { kind: 'buildframe', obj: f, max: 2, cap: config.FRAMES.BOTS.CAP } : null;
+  const open = pendingOf(state).filter((q) => q.ok !== false);
+  if (!open.length) return null;
+  const R = config.RAFT, raft = R.ENABLED && state.run && state.run.raft;
+  let f = open[0];
+  if (raft) { // (P5: the raft has two frames at once and a whole crew with nothing else to do: up to MAX_ON_FRAME bots on one, the rest on the next)
+    const on = (q) => Object.values(state.players).filter((b) => b.bot && b.botJob && b.botJob.obj === q).length;
+    f = open.find((q) => on(q) < R.BOTS.MAX_ON_FRAME) || open[0];
+  }
+  return { kind: 'buildframe', obj: f, max: raft ? R.BOTS.MAX_ON_FRAME : 2, cap: raft ? R.BOTS.CAP : config.FRAMES.BOTS.CAP };
 }
 // Where a bot stands to strip a hulk: the open deck whose point nearest the hulk is within hand's reach of it ({ d, x }), or null.
 function hulkSpot(ship, h) {

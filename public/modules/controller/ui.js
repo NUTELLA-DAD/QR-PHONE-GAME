@@ -137,7 +137,8 @@ export function createControllerUI({ network }) {
       cards.classList.toggle('route', v.kind === 'route' || v.kind === 'slot'); // (one big card per place when the crew picks where a part goes: A / B / C)
       cards.classList.toggle('names', v.kind === 'name'); // (L2: the christening: five names and "Name her later", three to a row)
       cards.classList.toggle('dock3',v.kind === 'dock' && v.options.length <= 4); // (F6: the 60-second dock: two big cards and Cast off, bigger type and touch targets)
-      cards.classList.toggle('dock4', v.kind === 'dock' && v.options.length === 4); // (LOOP.md G4: a part card and its FRAME twin make three cards and Cast off: three to a row)
+      cards.classList.toggle('dock4', v.kind === 'dock' && v.options.length >= 4); // (P5: a crew of 10 or more on the raft sees 5 cards: dock5 below, three to a row)
+      cards.classList.toggle('dock5', v.kind === 'dock' && v.options.length >= 5); // (LOOP.md G4: a part card and its FRAME twin make three cards and Cast off: three to a row)
       v.options.forEach((o, i) => {
         const b = document.createElement('button');
         const price = o.sold ? 'SOLD' : o.price || (o.cost != null ? 'Salvage ' + o.cost : ''); // (G2: o.price says "Salvage 55 + 3 scrap")

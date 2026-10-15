@@ -26,6 +26,8 @@ const EEL_FINALE_ON = typeof process === 'undefined' || !!(process.env && proces
 const DERELICT_ON = typeof process === 'undefined' || !(process.env && process.env.NO_DERELICTS);
 // A4 (CASTLE.md, ground sword fights): a crewman on the ground fights a soldier with a sword swing, a timed BLOCK / PARRY and a flank bonus for two (AWAY.DUEL). ON in the game; NO_DUEL=1 in a tool is the old shove-to-escape (the objectives and treasure gates pin it). The seeded baselines pin the away team off (NO_AWAY=1), which turns all of it off too.
 const DUEL_ON = typeof process === 'undefined' || !(process.env && process.env.NO_DUEL);
+// PLAYTEST1.md P5 (the raft): a voyage may start on a tiny one-deck raft with two gift frames (an engine pod and a gun) and a hold of scrap, and grow stop by stop; the Breaker's Yard is its first stop. ON in the game (a browser has no process) and in a Node tool, where it only exists when a start build 'raft' is asked for (sim.setStartBuild('raft'), voyagesim --build raft); NO_RAFT=1 = the game without it (no Ship button choice, no engine frames, no deck cards: today's Sparrow and classic).
+const RAFT_ON = typeof process === 'undefined' || !(process.env && process.env.NO_RAFT);
 export const config = {
   W: 1600,
   H: 900,
@@ -933,7 +935,7 @@ export const config = {
   // The SHIPWRIGHT'S YARD (S.6a, modules/host/partsShop.js): ship PARTS as cards in the sky-dock shop, at most one per dock. A part is a pure build edit (the voyage's parts list,
   // simulation.js run.build), checked by the validator (never a FAIL) and fitted to ship 0 at the dock; its effects are weight, lift, steam and stations in the build, never config.
   PARTS_SHOP: {
-    PRICES: { hullBay: 130, keel: 150, gasbag: 160, engine: 120, liftEngine: 170, nest: 140, gun: 100, lamp: 90, bombBay: 150, boiler: 170, coal: 90, ammo: 90, armour: 120, sail: 110, ballast: 90, ladder: 90, pole: 90, lift: 130, crewCannon: 140, gun_long: 160, gun_mortar: 150, gun_scatter: 110, gun_flak: 120, gun_harpoon: 150, mineLayer: 130, ramProw: 130, dropHatch: 100 }, // base salvage price of each part
+    PRICES: { hullBay: 130, keel: 150, gasbag: 160, engine: 120, liftEngine: 170, nest: 140, gun: 100, lamp: 90, bombBay: 150, boiler: 170, coal: 90, ammo: 90, armour: 120, sail: 110, ballast: 90, ladder: 90, pole: 90, lift: 130, crewCannon: 140, gun_long: 160, gun_mortar: 150, gun_scatter: 110, gun_flak: 120, gun_harpoon: 150, mineLayer: 130, ramProw: 130, dropHatch: 100, lowerDeck: 110, topDeck: 100 }, // base salvage price of each part (P5: lowerDeck and topDeck are the raft's second and third decks)
     REPEAT_PRICE: 0.3, // each part already bought this voyage adds this share of the base price (the price rises with how many you own)
     CREW_SMALL: 3, // a crew of this many players or fewer finds engines, armour and gasbags cheaper...
     SMALL_MUL: 0.85, // ...by this factor
@@ -999,7 +1001,7 @@ export const config = {
     START_BUILD: 'sparrow', // the ship a Voyage / Quick / Campaign starts with in the browser host ('classic' = the old full ship; the pause menu toggles it). Headless tools stay on the classic ship unless they ask (sim.setStartBuild)
     // F1 (FUN.md): in the browser host the start ship follows the crew size at CAST OFF unless the Ship button (or ?ship=) has forced one: a crew of MAX or fewer gets the Sparrow, a bigger one the classic ship (simulation.js castOff, pickStartBuild).
     // A tool that asks for a build with sim.setStartBuild(id) has forced it. ENABLED false = the Ship button's saved choice (or START_BUILD) always wins, as before.
-    START_BUILD_BY_CREW: { ENABLED: true, max: 6, small: 'sparrow', big: 'classic' },
+    START_BUILD_BY_CREW: { ENABLED: true, max: 6, small: RAFT_ON ? 'raft' : 'sparrow', big: 'classic' }, // (P5: a small crew starts on the tiny RAFT, config.RAFT; the Ship button also offers the Sparrow and the classic as QUICK STARTs)
     // The harder second voyage of the Evening Campaign, started after the first Flagship falls.
     SECOND: {
       DANGER_BONUS: 1, // every stop (and the Flagship) is this many skulls harder (danger may go above 3)
@@ -2557,7 +2559,7 @@ export const config = {
   // without SCRAP_ON never sees a frame); NO_FRAMES=1 in a tool (or ENABLED false) is the game without them: the dock offers only the plain part card.
   FRAMES: {
     ENABLED: typeof process === 'undefined' || !process.env ? true : !process.env.NO_FRAMES, // the switch
-    PARTS: ['gun', 'gun_long', 'gun_mortar', 'gun_scatter', 'gun_flak', 'gun_harpoon', 'gun_flame', 'lamp', 'armour', 'ballast', 'coal', 'ammo', 'sail', 'ladder', 'pole', 'lift', 'dropHatch'], // the Yard parts a frame can be bought for (the small ones; hull bays, decks, bags, engines, boilers, the bomb bay and nests stay at the Yard)
+    PARTS: ['gun', 'gun_long', 'gun_mortar', 'gun_scatter', 'gun_flak', 'gun_harpoon', 'gun_flame', 'lamp', 'armour', 'ballast', 'coal', 'ammo', 'sail', 'ladder', 'pole', 'lift', 'dropHatch', ...(RAFT_ON ? ['engine'] : [])], // the Yard parts a frame can be bought for (the small ones, and since P5 the engine pod: the raft's gift frame; hull bays, decks, bags, boilers, the bomb bay and nests stay at the Yard)
     CASH_SHARE: 0.4, // the frame card costs this share of the part's salvage price (the plain card is half in cash and half in bundles from the hold, or all cash with an empty hold): the bundles are carried in flight
     PER: 30, MIN: 2, MAX: 6, // bundles a frame takes = the part's salvage price / PER, rounded, between MIN and MAX (the same scale as SCRAP.PRICE.PART_PER: a gun is 3)
     TIME: 2.5, // seconds of holding Action to put one bundle in
@@ -2573,6 +2575,36 @@ export const config = {
       ALLOW: ['calm', 'escape'], // bots build only in a CALM: these tempo phases (never a set piece or the trickle before one), and never while she falls, with raiders aboard, a gunship or a live creature about ...
       MAX_FIRES: 0, // ... or more than this many fires burning
     },
+  },
+  // THE RAFT (PLAYTEST1.md section 3, P5; shipBuild.js BUILDS.raft, simulation.js raftGift / raftDock, voyage.js, stopGoals.js): "tiny raft, build it all". A voyage starts on a 480 px open deck with one small balloon, a boiler, the helm, the coal and
+  // ammo bunkers and three racks - no engine and no gun. At CAST OFF the crew is GIFTED two empty FRAMES (an engine pod aft, a gun fore) and a purse of scrap bundles in the hold; they carry the scrap to the frames and BUILD them (buildFrames.js),
+  // strip the first wrecks of the Breaker's Yard (stop 1, a SALVAGE RUN field map) and add a hull bay, a lower deck, a gasbag ... at each dock. Only runs whose start build is 'raft' read any of this. ENABLED false = no raft anywhere: the Ship
+  // button offers the Sparrow and the classic only, and the engine pod is no frame (today's game). Frames and scrap are the way she grows: a Node tool without SCRAP_ON gets the gift already BUILT (an engine and a gun), so the raft still flies.
+  RAFT: {
+    ENABLED: RAFT_ON,
+    START_SCRAP: { BASE: 4, PER_CREW: 0.5 }, // bundles in the hold at cast off: BASE + floor(crew x PER_CREW), at most SCRAP.HOLD_CAP (a crew of 3: 5; of 8: 8)
+    GIFT: ['engine', 'gun'], // the two frames waiting on her deck: which part, ...
+    GIFT_NEED: { engine: 3, gun: 3 }, // ... how many bundles each takes (6 in all), ...
+    GIFT_AT: { engine: 'aft', gun: 'fore' }, // ... and which end of the ship the Yard place nearest it is on
+    FRAMES_PENDING: { 1: 1, 6: 2, 12: 3 }, // frames waiting at a dock (the plain frame card is not offered while this many are unfinished) by crew size: the biggest key not over the crew (1-5: one, 6-11: two, 12 and more: three)
+    POWER_SCALE: 0.6, // the raft meets danger in proportion to her power this much (YARD.POWER_SCALE is 0.2 for the Sparrow): a bare hull is spared nearly half the danger until she has guns (POWER_FLOOR still holds)
+    NO_BREAK_BEFORE: 2, // no end of a ONE-DECK ship breaks off or splits in the first stops of the voyage (before this stop number): the raft cannot lose the boiler or the helm to a few shells
+    NAME: "The Breaker's Yard", // stop 1's name on the route map and the briefing
+    YARD: { // stop 1: a SALVAGE RUN on a field map (config.DERELICT.RUN) made gentle
+      TIME: 420, // seconds until the storm takes the wrecks (a run's own is 210: the crew is building an engine as well)
+      NEED: 2, NEED_BIG: 4, BIG_CREW: 10, // parts to strip: 2, or 4 for a crew of 10 or more
+      AT: [0.15, 0.45, 0.75], // where the three wrecks hang along the field (shares of its width): the first is 1200 px from the start, so even the raft with no engine drifts to it
+      FIRST_MIN_COL: 14, // the first wreck may hang this near the start (map squares; the start is at 12, a normal wreck no nearer than 30)
+      RATE_MUL: 0.5, // the pacing director's speed there: bats only, at half rate
+      REWARD_MUL: 1, // the stop's salvage reward
+    },
+    DOCK: { // the sky-docks of a raft voyage: she is offered the things that GROW her first
+      PLAN: ['hullBay', 'lowerDeck', 'gasbag', 'topDeck'], // the big card of dock 1, 2, 3 ...: the first of these she can take (a card she cannot take falls back to the Yard's random part); after the plan, random
+      CARDS: 4, CARDS_BIG: 5, BIG_CREW: 10, // cards at a dock (Cast off included); a crew of BIG_CREW or more gets CARDS_BIG (the phone's dock5 grid)
+      NAMED: 2, NAMED_BIG: 3, // stripped part cards (G5) a dock may show, and for a big crew
+    },
+    BOTS: { PREFER: 1, BUILD_ANY_PHASE_UNTIL_GUNS: 1, CAP: 4, MAX_ON_FRAME: 3 }, // bots on a raft voyage vote for the FRAME card whenever there is one (FRAMES.BOTS.PREFER is 0: they buy what they can pay for), and build frames in ANY phase of the pacing until she has this many guns (they cannot wait for a calm to get a gun); up to CAP bots on build jobs at once (FRAMES.BOTS.CAP is 2), at most MAX_ON_FRAME on one frame
+    TITAN: false, // the Island Titan does not stand on a raft's route (she would meet him with no gun)
   },
   // THE SHIP'S BOOK (SHIPS_BOOK.md L0 + L1). moments.js remembers what happened, with names (state.moments, data only: it draws no random numbers and changes nothing in the sim); logWriter.js tells it back as
   // short sentences in the banner voice; logArt.js draws the Log line at the sky-dock, the PLAY OF THE MISSION ribbon on the scorecard and the run-end postcard.

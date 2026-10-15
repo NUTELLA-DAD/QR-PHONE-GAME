@@ -477,6 +477,29 @@ BUILDS.sparrow = config.CONTROLS.GRAB_V2.ENABLED
   ? [...BUILDS.sparrow_v1.filter((q) => q.part !== 'rack' && q.part !== 'extinguisher' && q.part !== 'vent').map((q) => (q.part === 'pipe' && SPARROW_VALVES[q.to] ? { ...q, valve: SPARROW_VALVES[q.to] } : q)), ...SPARROW_RACKS]
   : BUILDS.sparrow_v1;
 
+// ---- the raft (PLAYTEST1.md section 3a, P5) ------------------------------------------------------------------
+// The tiny start: ONE open-air deck 480 px long (two 240 px segments, so there is no critical middle to split at), ONE gasbag, the helm, a boiler with its coal and the ammo hold, a medbay, one hammer, one sword,
+// one extinguisher, a vent and two boarding points. No engine, no gun, no lookout, no ladder: the crew BUILD those from the two gift frames and the scrap in the hold (simulation.js newRun, config.RAFT) and add the rest
+// stop by stop. Hover 44 bare, 57 with the engine and the gun built. The deck is open air so a gun can stand on it and raiders can land. Spacing: the vent and the three racks stand together at the aft end, 95+ px from the
+// coal, ammo and helm seats (a rack nearer than about 85 hardly ever wins the button, P3); the boiler is no seat. The engine frame goes on the aft outrigger (x 170), the gun frame on the fore slot (x 560).
+BUILDS.raft = [
+  { part: 'frame', nestRise: 94, shield: { cx: 380, cy: 381, rx: 260, ry: 486 } },
+  { part: 'deck', id: 'main', row: 'main', name: 'Main Deck', x0: 140, x1: 620, outside: true },
+  { part: 'gasbag', cx: 380, cy: 198, rx: 360, ry: 232 },
+  { part: 'station', n: 'Boiler', kind: 'boiler', p: 'main', x: 305 },
+  { part: 'station', n: 'Coal Bunker', kind: 'coal', p: 'main', x: 375 },
+  { part: 'station', n: 'Ammo Hold', kind: 'ammo', p: 'main', x: 440 },
+  { part: 'station', n: 'Helm', kind: 'helm', p: 'main', x: 505 },
+  { part: 'pipe', to: 'Helm', p: 'main', points: [[335, 560], [335, 505], [505, 505], [505, 615]], valve: [420, 505] },
+  { part: 'medbay', p: 'main', x: 340 },
+  { part: 'vent', p: 'main', x: 145 },
+  { part: 'rack', kind: 'hammer', p: 'main', x: 190 },
+  { part: 'rack', kind: 'sword', p: 'main', x: 235 },
+  { part: 'extinguisher', p: 'main', x: 280 },
+  { part: 'boarderEntry', p: 'main', x: 200 },
+  { part: 'boarderEntry', p: 'main', x: 590 },
+];
+
 // ---- building the layout ---------------------------------------------------------------------------------
 
 // Turn a list of placed parts into layout data (same shape as the old hand-written SHIP_LAYOUT), plus the derived

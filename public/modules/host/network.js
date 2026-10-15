@@ -228,19 +228,22 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
   const showShip = () => {
     const sb = simulation.state.startBuild;
     const BC = config.VOYAGE.START_BUILD_BY_CREW;
-    const html = simulation.state.startBuildAuto ? `Ship: Auto (${simulation.pickStartBuild() === 'classic' ? 'Classic' : 'Sparrow'})<br><small style="font-size:12px;opacity:.75">Sparrow for ${BC.max} crew or fewer, else Classic</small>` : sb === 'playtest' ? 'Ship: your build<br><small style="font-size:12px;opacity:.75">from the build page</small>' : 'Ship: ' + (sb === 'classic' ? 'Classic' : 'Sparrow') + `<br><small style="font-size:12px;opacity:.75">${sb === 'classic' ? 'the full ship from the start' : 'start small, build at the sky-docks'}</small>`;
+    const NAMES = { raft: 'Raft', sparrow: 'Sparrow', classic: 'Classic' }; // (P5: the Ship button cycles Auto / Raft / Sparrow / Classic; the Sparrow and the classic are QUICK STARTS: a ship that already works)
+    const small = NAMES[BC.small] || 'Sparrow';
+    const html = simulation.state.startBuildAuto ? `Ship: Auto (${NAMES[simulation.pickStartBuild()] || 'Sparrow'})<br><small style="font-size:12px;opacity:.75">${small} for ${BC.max} crew or fewer, else Classic</small>` : sb === 'playtest' ? 'Ship: your build<br><small style="font-size:12px;opacity:.75">from the build page</small>' : 'Ship: ' + (NAMES[sb] || 'Sparrow') + (sb === 'raft' ? '<br><small style="font-size:12px;opacity:.75">a tiny raft: build it all, stop by stop</small>' : `<br><small style="font-size:12px;opacity:.75">QUICK START: ${sb === 'classic' ? 'the full ship from the start' : 'start small, build at the sky-docks'}</small>`);
     if (shipButton.innerHTML !== html) shipButton.innerHTML = html;
   };
   shipButton.onclick = () => {
     const sb = simulation.state.startBuild;
-    if (simulation.state.startBuildAuto) { // (F1: Auto -> Sparrow -> Classic -> Auto: the first two force a ship, the last goes back to choosing by the crew size)
-      simulation.setStartBuild('sparrow');
-      saveStartBuild('sparrow');
+    const cycle = config.RAFT.ENABLED ? ['raft', 'sparrow', 'classic'] : ['sparrow', 'classic']; // (P5: Auto -> Raft -> Sparrow -> Classic -> Auto; with RAFT.ENABLED false, as before: Auto -> Sparrow -> Classic -> Auto)
+    if (simulation.state.startBuildAuto) { // (F1: Auto -> the first ship ... -> Classic -> Auto: all but the last force a ship, the last goes back to choosing by the crew size)
+      simulation.setStartBuild(cycle[0]);
+      saveStartBuild(cycle[0]);
     } else if (config.VOYAGE.START_BUILD_BY_CREW.ENABLED && sb === 'classic') {
       simulation.setStartBuild(simulation.pickStartBuild(), 'auto');
       saveStartBuild(null);
     } else {
-      const next = sb === 'classic' ? 'sparrow' : 'classic'; // (a playtest build goes to classic first)
+      const i = cycle.indexOf(sb), next = i < 0 ? cycle[1] : cycle[(i + 1) % cycle.length]; // (a playtest build goes to the first quick start)
       simulation.setStartBuild(next);
       saveStartBuild(next);
     }
