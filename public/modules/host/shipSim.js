@@ -1031,7 +1031,7 @@ export function createShipSim(world, ship, W) {
   const steamFix = createSteamFix({ state, ship, modules, structure, goingDown, shipPuff, hasKind }); // steam and lift: burst pipes shut themselves, the pump first, the warning ladder (steamFix.js, config.STEAMFIX)
   const comeAbout = createComeAbout(ship, W, { goingDown, flight }); // turning her round on the helm's command (comeAbout.js)
 
-  const health = createHealth({ state, ship, phoneFx, emitPlayerUi, shipPuff, shipPop }); // crew health: hearts, burns, the medical bay (health.js)
+  const health = createHealth({ state, ship, phoneFx, emitPlayerUi, shipPuff, shipPop, worldPuff: puff, worldPop: (x, y, kind, color, size) => pop(state, x, y, kind, color, size) }); // crew health: hearts, burns, the medical bay (health.js)
   const hydrogen = createHydrogen({ state, ship, fireSys, explode: (i, blast) => explodeBag(i, blast), shipPuff, rng: () => breakRng() }); // hydrogen bags: scorched by fire, alight, exploding (hydrogen.js, config.GASES.HYDROGEN)
   const raiders = createRaiders({ state, modules, puff, impact });
   const escort = createEscort({ state, puff, phoneFx, moment: (kind, o) => W.moment && W.moment(kind, o) });
@@ -1745,6 +1745,7 @@ export function createShipSim(world, ship, W) {
       const alarm = ship.main && !player.bot ? state.alarmPhone(player, stKind) : ''; // (FUN.md F2: the phone's one line - the top alarm that concerns this player's deck or seat; alarms.js)
       const awayUi = player.on && player.on.away ? W.ground.ui(player) : null; // (A0: the away man's hint and STRANDED countdown, ground.js)
       if (awayUi && awayUi.status) status = awayUi.status;
+      if (awayUi && awayUi.u.duel) attackLabel = 'Swing'; // (CASTLE.md A4: in a sword fight the left button swings, the other one blocks)
       const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, st ? st.s + '/' + st.l + '/' + st.w + '/' + st.f : '', primePct, loadPct, jobUi ? jobUi.label + '|' + jobUi.dir : '', aid, gaid, grabNow ? grabNow.label + grabNow.swap : '', glock, progNow, ship.pose.f, state.turning.t > 0 ? 1 : 0, hp, player.team ? player.team + (state.match && state.match.phase === 'lobby' ? 's' : '') : '', eng ? JSON.stringify(eng) : '', alarm, awayUi ? awayUi.k : ''].join('|');
       const hv = config.CONTROLS.HELM_V2 && player.lock && kind === 'helm' && !player.hj && !player.bot ? helmGauge() : null; // (F3: the phone's gas gauge, [gas, the hover mark] in whole numbers: the pressure lever is only a readout now)
       const keyF = hv ? key + '|' + hv : key;

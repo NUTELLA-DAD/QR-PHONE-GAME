@@ -341,8 +341,9 @@ export function createObjectives({ state, S, host }) {
         o.stats.noticed++;
         pop(state, q.x, q.y - 230, '!', '#ff4d4d', 1.6);
         state.sfxQ && state.sfxQ.push(['horn']);
-        say('SOLDIERS SPOT ' + upper(best) + '! BOMB THE PLAZA OR HE MUST RUN', 3);
-        host.phoneFx(best, 'SOLDIERS! ATTACK shoves them back - or run!', [80, 40, 80]);
+        const sword = config.AWAY.DUEL.ENABLED; // (A4: the sword fights)
+        say('SOLDIERS SPOT ' + upper(best) + (sword ? '! HE CAN FIGHT, RUN OR CALL A BOMBING' : '! BOMB THE PLAZA OR HE MUST RUN'), 3);
+        host.phoneFx(best, sword ? 'SOLDIERS! ATTACK swings your sword. BLOCK as theirs falls. Or run!' : 'SOLDIERS! ATTACK shoves them back - or run!', [80, 40, 80]);
       }
     }
   }
@@ -358,6 +359,7 @@ export function createObjectives({ state, S, host }) {
       if (Math.abs(q.x - q.home) <= 6) { q.hunt = null; q.state = 'muster'; q.x = q.home; q.huntCd = SO.COOLDOWN; }
       return;
     }
+    if (h.phase === 'duel') return duelPhase(f, q, h, dt);
     if (!p || !walking(p) || f.down || f.routed || (ring() && ring().crown) || Math.abs(q.x - q.home) > SO.LEASH) return toBack(q);
     const dist = Math.abs(p.x - q.x), dir = Math.sign(p.x - q.x) || 1;
     if (h.phase === 'tell') {
@@ -367,7 +369,10 @@ export function createObjectives({ state, S, host }) {
     } else if (h.phase === 'run') {
       q.state = 'flee';
       q.fleeTo = p.x - dir * SO.REACH * 0.5;
-      if (dist <= SO.REACH && !(p.koGrace > 0)) { h.phase = 'wind'; h.t = SO.WIND; q.state = 'cheer'; q.cheer = 0.6; pop(state, q.x, q.y - 230, '!', '#ff4d4d', 1.4); }
+      if (dist <= SO.REACH && !(p.koGrace > 0)) {
+        if (config.AWAY.DUEL.ENABLED && host.duel()) { h.phase = 'duel'; q.state = 'flee'; q.fleeTo = q.home; host.duel().engage(f, q, p); return; } // (A4: the first soldiers leave the block and fight him; the block goes home)
+        h.phase = 'wind'; h.t = SO.WIND; q.state = 'cheer'; q.cheer = 0.6; pop(state, q.x, q.y - 230, '!', '#ff4d4d', 1.4);
+      }
     } else if (h.phase === 'wind') {
       q.state = 'cheer';
       q.cheer = 0.6;
@@ -395,6 +400,21 @@ export function createObjectives({ state, S, host }) {
       if ((h.t -= dt) <= 0) { h.phase = 'run'; q.state = 'flee'; }
     }
   }
+  // A4: the squad's soldiers are fighting (duel.js); the block goes home and sends one more now and then. It gives up the hunt when his man is gone or too far, or SQUAD.BREAK of its soldiers are down.
+  function duelPhase(f, q, h, dt) {
+    const SO = OB().SOLDIERS, DD = config.AWAY.DUEL, duel = host.duel(), o = S.obj;
+    const lead = duel.leadOf(q);
+    if (lead) h.id = lead.id;
+    q.fleeTo = q.home;
+    q.state = Math.abs(q.x - q.home) <= 6 ? 'muster' : 'flee';
+    if (q.state === 'muster') q.x = q.home;
+    const broke = (h.downs || 0) >= DD.SQUAD.BREAK;
+    if (!lead || f.down || f.routed || (ring() && ring().crown) || broke || Math.abs(lead.x - q.home) > SO.LEASH + 300) {
+      if (broke && lead) { o.stats.saves++; config.AWAY.DUEL.ENABLED && pop(state, q.x, q.y - 230, 'THE SQUAD BREAKS!', '#ffd23f', 1.4); }
+      return toBack(q);
+    }
+    duel.reinforce(f, q, h, dt);
+  }
   // The squad nearest to a man that is hunting (or about to), within SHOVE px: the ATTACK button throws it back.
   function shoveTarget(p) {
     const r = ring(), SO = OB().SOLDIERS;
@@ -406,7 +426,7 @@ export function createObjectives({ state, S, host }) {
   // ATTACK: shove the soldiers off. True when it was a shove (the hookshot or anything else keeps its button otherwise).
   function shove(p) {
     const SO = OB().SOLDIERS, o = p.on, q = shoveTarget(p);
-    if (!q || !o || (o.shoveCd || 0) > 0) return false;
+    if (config.AWAY.DUEL.ENABLED || !q || !o || (o.shoveCd || 0) > 0) return false; // (A4: with the sword fights ATTACK is a swing, duel.js)
     o.shoveCd = SO.SHOVE_CD;
     const dir = Math.sign(q.x - p.x) || 1, h = q.hunt;
     q.x = clamp(q.x + dir * SO.PUSH, q.home - SO.LEASH, q.home + SO.LEASH);
@@ -447,7 +467,7 @@ export function createObjectives({ state, S, host }) {
   function ui(p) {
     const o = S.obj;
     if (!o.on || !p.on || p.on.mode !== 'walk') return null;
-    if (hunted(p)) return { hint: 'SOLDIERS! ATTACK shoves them back. Run - you are faster. A bomb on the plaza saves you.', verb: 'RUN' };
+    if (hunted(p)) return { hint: config.AWAY.DUEL.ENABLED ? 'SOLDIERS! ATTACK swings, BLOCK parries. Or run - you are faster. A bomb saves you.' : 'SOLDIERS! ATTACK shoves them back. Run - you are faster. A bomb on the plaza saves you.', verb: 'RUN' };
     if (carrying(p)) return { hint: 'You carry the GREAT BANNER! Walk to the rope ladder and climb it.', verb: 'STEAL' };
     const ob = nearOf(p);
     if (ob) {
@@ -517,7 +537,7 @@ export function createObjectives({ state, S, host }) {
     return { x: ob.x, fire: Math.abs(p.x - ob.x) < K.REACH * 0.5, done: false };
   }
   // A hunter within shoving reach of this man (the bot shoves it).
-  const shoveReady = (p) => !!shoveTarget(p) && !((p.on && p.on.shoveCd) > 0);
+  const shoveReady = (p) => !config.AWAY.DUEL.ENABLED && !!shoveTarget(p) && !((p.on && p.on.shoveCd) > 0);
 
   return { begin, reset, update, act, ui, job, speedMul, shove, shoveReady, onAboard, onGone, pickups, climbers, pickFor, botGoal, target, carrying, hunted, byId, nearOf, META };
 }

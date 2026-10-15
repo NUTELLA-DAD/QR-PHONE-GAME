@@ -229,8 +229,32 @@ export function createControllerUI({ network }) {
       el.classList.add(cls);
     }
   };
+  // CASTLE.md A4, sword fights: a soldier raises his sword - the amber frame and the ring that closes on the blow (fx.cue = seconds to it), the BLOCK button pulsing; fx.now = the gold second buzz, a press now parries.
+  let cueTimer = null;
+  const duelCue = (secs) => {
+    const c = $('duelcue'), j = $('jump');
+    c.style.setProperty('--dur', secs + 's');
+    c.classList.remove('go', 'now');
+    void c.offsetWidth;
+    c.classList.add('go');
+    j.classList.remove('now');
+    j.classList.add('cue');
+    clearTimeout(cueTimer);
+    cueTimer = setTimeout(() => j.classList.remove('cue', 'now'), secs * 1000 + 250);
+  };
+  const duelNow = () => {
+    const c = $('duelcue'), j = $('jump');
+    c.classList.remove('go');
+    c.classList.add('now');
+    j.classList.remove('cue');
+    j.classList.add('now');
+    clearTimeout(cueTimer);
+    cueTimer = setTimeout(() => { c.classList.remove('now'); j.classList.remove('now'); }, 550);
+  };
   const showFx = (fx) => {
     if (fx.hit) hurtFlash();
+    if (fx.cue) duelCue(fx.cue);
+    if (fx.now) duelNow();
     vibrate(fx.buzz);
     if (!fx.toast) return;
     const t = $('toast');
@@ -314,7 +338,7 @@ export function createControllerUI({ network }) {
       $('atk').style.display = '';
       $('jump').style.display = 'none';
       $('atk').classList.remove('prime', 'ready');
-      document.body.classList.remove('helm', 'gaugeon');
+      document.body.classList.remove('helm', 'gaugeon', 'duel');
       return;
     }
     const label = next.label || 'Hey!';
@@ -376,6 +400,9 @@ export function createControllerUI({ network }) {
     if (hooks.eng) hooks.eng(engOn ? next.eng : null); // (one lever per engine, SPLIT / LINK)
     showMid();
     $('jump').style.display = next.locked ? 'none' : ''; // no hopping while at a station
+    const duel = !!(next.away && next.away.duel); // (CASTLE.md A4: in a sword fight the second button is BLOCK)
+    document.body.classList.toggle('duel', duel);
+    setButton('jump', duel ? '🛡️' : '⤴️', duel ? 'BLOCK' : 'JUMP');
   };
 
   // A hold action was only tapped: the big button shakes and says KEEP HOLDING.

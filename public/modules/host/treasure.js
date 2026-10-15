@@ -204,7 +204,7 @@ export function createTreasure({ state, S, host }) {
     const K = T().GUARDS, o = p.on;
     if (!S.tre.on || !o || o.mode !== 'walk') return false;
     let g = null, bd = K.SHOVE;
-    for (const q of S.tre.guards) { const d = Math.abs(q.x - p.x); if (q.state !== 'gone' && d <= bd) { g = q; bd = d; } }
+    if (!config.AWAY.DUEL.ENABLED) for (const q of S.tre.guards) { const d = Math.abs(q.x - p.x); if (q.state !== 'gone' && d <= bd) { g = q; bd = d; } } // (A4: with the sword fights a guard is fought in duel.js, not shoved)
     if (g) {
       if ((o.shoveCd || 0) > 0) return true;
       o.shoveCd = K.SHOVE_CD;
@@ -225,7 +225,7 @@ export function createTreasure({ state, S, host }) {
     if (c) { release(c, p, 'DROPPED'); host.phoneFx(p, 'Chest put down.', [30]); return true; }
     return false;
   }
-  const shoveReady = (p) => S.tre.on && !((p.on && p.on.shoveCd) > 0) && S.tre.guards.some((q) => q.state !== 'gone' && Math.abs(q.x - p.x) <= T().GUARDS.SHOVE);
+  const shoveReady = (p) => S.tre.on && !config.AWAY.DUEL.ENABLED && !((p.on && p.on.shoveCd) > 0) && S.tre.guards.some((q) => q.state !== 'gone' && Math.abs(q.x - p.x) <= T().GUARDS.SHOVE);
   // The man walks (and climbs) slower with a chest: alone, or in a pair.
   function speedMul(p) {
     const c = p.carry === 'chest' ? chestOf(p, 'carried') : null, K = T();
@@ -340,7 +340,7 @@ export function createTreasure({ state, S, host }) {
   function leaveGuard(g) { g.state = 'gone'; stats.left++; }
   function guardStep(g, men, dt) {
     const K = T().GUARDS;
-    if (g.state === 'gone') return;
+    if (g.state === 'gone' || g.state === 'duel') return; // (A4: a guard whose man came close fights with his sword: duel.js has him)
     if (g.state === 'stun') { if ((g.t -= dt) <= 0) g.state = 'come'; return; }
     let tgt = null, bd = Infinity;
     for (const p of men) { const d = Math.abs(p.x - g.x); if (d < bd && Math.abs(p.y - g.y) < K.HEIGHT * 6) { tgt = p; bd = d; } }

@@ -215,6 +215,21 @@ body.teamed #strip{border-left:16px solid var(--tc,#c4574d)}
 #hurtflash{position:fixed;inset:0;background:radial-gradient(ellipse at center,rgba(230,57,70,.05) 35%,rgba(230,57,70,.65) 100%);opacity:0;pointer-events:none;z-index:6}
 #hurtflash.go{animation:hflash .55s ease-out}
 @keyframes hflash{0%{opacity:1}100%{opacity:0}}
+/* CASTLE.md A4, sword fights: with a soldier near, JUMP becomes BLOCK (bigger, blue). The cue at a soldier's telegraph: an amber frame, a ring that closes on the moment of the blow, the BLOCK button pulsing; then NOW (gold) when a press parries. */
+body.duel #buttons{--j:min(calc(var(--H) * .4),104px)}
+body.duel #jump{background:#2f6fb5}
+#jump.cue{animation:jcue .22s ease-in-out infinite alternate}
+body #jump.now,body.duel #jump.now{animation:none;background:#ffd23f;color:#2b2622;box-shadow:0 6px 0 #2b2622,0 0 30px 12px #fff2b0}
+@keyframes jcue{from{box-shadow:0 6px 0 #2b2622,0 0 8px 2px #ff4d4d}to{box-shadow:0 6px 0 #2b2622,0 0 26px 10px #ffb347}}
+#duelcue{position:fixed;inset:0;border:14px solid #ffb347;border-radius:22px;box-sizing:border-box;opacity:0;pointer-events:none;z-index:6;display:flex;align-items:center;justify-content:center}
+#duelcue.go{animation:dcue var(--dur,.8s) linear forwards}
+#duelcue.now{border-color:#ffd23f;animation:none;opacity:.9}
+#duelcue.now b{transform:scale(.22);animation:none}
+#duelcue b{position:absolute;width:62vmin;height:62vmin;border:10px solid #fff7e0;border-radius:50%;box-sizing:border-box;opacity:.85}
+#duelcue.go b{animation:dring var(--dur,.8s) linear forwards}
+#duelcue span{font-size:30vmin;font-weight:900;color:#d62828;text-shadow:0 0 0 #fff,3px 3px 0 #fff7e0,-3px -3px 0 #fff7e0,3px -3px 0 #fff7e0,-3px 3px 0 #fff7e0}
+@keyframes dcue{0%{opacity:.95}80%{opacity:.8}100%{opacity:0}}
+@keyframes dring{from{transform:scale(1)}to{transform:scale(.22)}}
 #toast{display:none;position:fixed;left:50%;top:22%;transform:translateX(-50%);background:#ffd23f;color:#2b2622;border:5px solid #2b2622;border-radius:16px;padding:10px 18px;font-size:24px;font-weight:900;z-index:7;box-shadow:0 5px 0 #2b2622;pointer-events:none;white-space:nowrap}
 #rotate{display:none;position:fixed;inset:0;background:#2b2622;color:#f3ead6;font-size:24px;font-weight:900;text-align:center;align-items:center;justify-content:center;flex-direction:column;gap:16px;z-index:9}
 #rotate .ic{font-size:70px}
@@ -299,6 +314,7 @@ h1{font-size:28px}
 <div id="vote"><h2 id="vtitle">Pick an upgrade</h2><div class="cards" id="vcards"></div></div>
 <div id="rcard"><div class="box"><div class="ic" id="rcic">🧭</div><div class="bd"><h2 id="rctitle"></h2><p id="rctext"></p><small>Tap to close</small></div></div></div>
 <div id="hurtflash"></div>
+<div id="duelcue"><b></b><span>!</span></div>
 <div id="toast"></div>
 <div id="rotate"><div class="ic">📱↻</div>Turn your phone sideways</div>
 <script src="socket.io/socket.io.js"></script>

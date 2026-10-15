@@ -197,7 +197,7 @@ export function createTreasureArt({ ctx, world, ink }) {
         if (q && !live3d) chest(q.x, q.y + 30 * q.w, 0.8 * q.w, c.kind, true);
       }
     }
-    for (const g of t.guards) { if (g.state === 'gone') continue; const q = at(g.x, g.y); if (q) guard(g, q.x, q.y, q.w, k8); }
+    for (const g of t.guards) { if (g.state === 'gone' || g.state === 'duel') continue; const q = at(g.x, g.y); if (q) guard(g, q.x, q.y, q.w, k8); } // (A4: a guard in a sword fight is drawn by duelArt.js)
     ctx.save();
     for (const g of t.guards) { // the line a guard aims along
       if (g.state !== 'aim' || !g.aim) continue;

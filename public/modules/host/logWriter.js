@@ -15,6 +15,7 @@ const ucfirst = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 const lowfirst = (s) => (s ? s[0].toLowerCase() + s.slice(1) : s);
 export const nameList = (names) => (names.length <= 1 ? names[0] || '' : names.length === 2 ? names[0] + ' and ' + names[1] : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1]);
 const TIMES = ['', 'once', 'twice', 'three times', 'four times', 'five times', 'six times', 'seven times', 'eight times', 'nine times'];
+const NUMS = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine']; // (A4: {men} - how many soldiers, how many blows)
 // "THE IRON WIDOW" / "The Iron Widow" / "Iron Widow" -> "the Iron Widow"
 export const titled = (name) => {
   const w = String(name || '').toLowerCase().replace(/\s+/g, ' ').trim().split(' ').filter(Boolean).map((x, i) => (i > 0 && ['of', 'the', 'and'].includes(x) ? x : ucfirst(x)));
@@ -184,11 +185,20 @@ const PLAY = {
   'flagship-down': ['sank the Flagship'], 'boss-down': ['shot down the zeppelin'], sandbag: ['carried the {item} the whole stop'],
   'scrap-first': ['stowed the first scrap'], 'scrap-hook': ['hooked scrap out of the sky'], 'hulk-hauled': ['hauled a hulk alongside'], 'scrap-dumped': ['dumped the scrap to climb'], 'scrap-patch': ['patched {things} with scrap'], 'scrap-built': ['paid in scrap for {things}'], 'frame-built': ['built {things} from scrap'], 'escort-crash': ['flew the escort fighter into an airship'],
 };
+Object.assign(PLAY, { // (CASTLE.md A4: the sword fights)
+  'duel-disarmed': ['disarmed {men} soldiers on the walls of {G}'], 'duel-parry': ['parried {men} blows at {G}'], 'duel-flank': ['flanked a soldier of {G}'], 'duel-rescue': ['got a fallen friend up at {G}'],
+});
 Object.assign(PLAY, { // (LOOP.md G5 / G6: wrecks, named parts, the salvage run and DEFEND)
   'derelict-boarded': ['boarded {G}'], 'derelict-stripped': ['unbolted {things} from {G}'], 'derelict-hauled': ['hauled {things} up from {G}'], 'derelict-rescue': ['freed a sailor from {G}'], 'named-part': ['bolted on {things} of {G}'],
   'salvage-won': ['led the salvage run'], 'salvage-lost': ['fought the storm for the wrecks'], 'defend-won': ['held the balloon'], 'defend-lost': ['fought for the balloon'], 'defend-saved': ['cleared the balloon of bats'],
 });
 const PLAY_LEADER = { kills: 'ruled the guns', raiders: 'beat back the raiders', holes: 'patched the hull', fires: 'fought the fires', repairs: 'kept her running', ammo: 'kept the guns fed', coal: 'fed the boiler', revives: 'picked everyone up', defused: 'defused the bomb', vent: 'saved the boiler', demolished: 'bombed the outposts', sabotage: 'sabotaged the gunship', boarding: 'led the boarding', sails: 'worked the sails', thrown: 'threw ballast', spots: 'spotted for the guns', cannon: 'flew the crew cannon', shovels: 'cleared the decks', cuts: 'cut her free', dumped: 'dumped the weight', hatch: 'worked the hatch', captures: 'took the bridge', bats: 'swatted the bats', stowed: 'filled the hold' };
+Object.assign(SENT, { // (CASTLE.md A4: the sword fights on the ground, duel.js; {times} is how many, {G} where)
+  'duel-disarmed': ['{who} disarmed {men} soldiers on the walls of {G} and walked on, still whistling.', '{who1} put {men} soldiers of {G} flat on their backs with nothing but a sword and good timing.', 'The garrison of {G} lost {men} swords to {who}.'],
+  'duel-parry': ['{who} turned aside {men} sword blows at {G} without a scratch.', '{who1} parried {men} soldiers in a row at {G}, and the soldiers noticed.', 'Blade after blade of {G} rang off {who}.'],
+  'duel-flank': ['{who} hit a soldier of {G} from behind while he was busy with a friend.', '{who} caught a soldier of {G} between them, and he went down.', 'A soldier of {G} found a sword on each side of him, thanks to {who}.'],
+  'duel-rescue': ['{who} dragged a friend to his feet again in the middle of {G}.', '{who1} knelt beside a fallen crewman at {G} and brought him round.', 'The garrison of {G} had knocked a crewman flat, and {who} got him up.'],
+});
 const AGAIN = ['Once more, ', 'Yet again, ', 'As ever, ', 'Still, ', 'And then, ', 'Later, '];
 export const TEMPLATES = { SENT, LEADER, PLAY, PLAY_LEADER, NAMED }; // (for tools/log-check.mjs: every template is filled with odd data and must come out clean)
 const GENTLE = ['A quiet stop. {who} did the most, mostly by being there.', 'Not much to report, but {who} was the busiest of the lot.', 'A gentle one. {who} kept the ship\'s spirits up.'];
@@ -201,7 +211,7 @@ function vars(m, ship) {
   const n = d.n | 0;
   return {
     ship: ship ? shipRef(ship) : 'the ship', who: nameList(names), who1: names[0], where: m.where || '', inwhere: inWhere(m.where), C, G, things: things(d.names), item: d.item || 'sandbag', stop: m.stopName || 'the stop',
-    times: TIMES[Math.min(9, Math.max(1, n))] || n + ' times',
+    times: TIMES[Math.min(9, Math.max(1, n))] || n + ' times', men: NUMS[Math.min(9, Math.max(1, n))] || String(n),
   };
 }
 const fill = (tpl, v) => ucfirst(tpl.replace(/\{(\w+)\}/g, (_, k) => (v[k] != null ? v[k] : '')).replace(/\s+([.,;])/g, '$1').replace(/\s{2,}/g, ' ').trim());

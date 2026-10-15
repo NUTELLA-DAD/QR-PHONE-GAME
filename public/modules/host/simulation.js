@@ -136,8 +136,8 @@ export function createSimulation() {
     if ((key === 'holes' || key === 'coal') && state.goingDown) moments.note('gd', player); // (who patched and stoked while she fell: goingDown.js tells them when she holds)
   };
   // A quick message and buzz on one player's phone (doesn't change their buttons).
-  const phoneFx = (player, toast, buzz, ms) => {
-    if (player && !player.bot && socket) socket.emit('host:ui', { id: player.id, ui: { fx: { toast, buzz, ms } } });
+  const phoneFx = (player, toast, buzz, ms, extra) => {
+    if (player && !player.bot && socket) socket.emit('host:ui', { id: player.id, ui: { fx: { toast, buzz, ms, ...extra } } }); // (extra: A4's duel cue - { cue: seconds to the blow } flashes the phone's BLOCK ring, { now: 1 } is the second buzz)
   };
   // Kill credit goes to whoever fired the shell.
   const credit = (shell) => {
@@ -240,7 +240,7 @@ export function createSimulation() {
   W.addShip = (...a) => addShip(...a); // (a split: shipSim.js splitShip makes the half that goes a ship of her own)
   W.removeShip = (...a) => removeShip(...a);
   Object.defineProperty(state, 'rival', { get: () => (state.ships[0] && state.ships[0].rival) || null, enumerable: false, configurable: true }); // (Versus: ship 0's rival, ships.js; every ship's context answers its own)
-  W.ground = state.groundSys = createGround({ state, puff, phoneFx }); // (A0: the away team; it needs ship 0, which addShip makes next, only when it runs. course.js begins it on every map, bots.js asks it for trips)
+  W.ground = state.groundSys = createGround({ state, puff, phoneFx, stat }); // (A0: the away team; it needs ship 0, which addShip makes next, only when it runs. course.js begins it on every map, bots.js asks it for trips)
   const main = addShip(null); // (B.2: this file is the WORLD. What belongs to one ship is shipSim.js; the voyage, the pacing director, the wreck and restart rules below work on the main ship, ships[0])
   const layout = main.layout;
   main.buildId = 'classic'; // (which build she wears: 'classic' | 'sparrow' | 'yard' = a start build that parts have been added to; Versus' shelf sets its own)
