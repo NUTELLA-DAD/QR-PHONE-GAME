@@ -411,7 +411,7 @@ BUILDS.classic = [
 // The starter ship of a Voyage (SHIP_BUILDING.md section 1): a compact gondola with two decks and a catwalk, one gasbag, two engines, a crow's nest with the Lookout and a lamp, the helm,
 // boiler, coal bunker, ammo hold, a workshop with racks, a medbay and a steam lift, three guns (Tail, Nose, Fore Sponson). Short walks, everybody needed; few guns, no bomb bay, one bag and
 // slow to answer. Made with the blueprint editor's own operations (buildSlots.js minimalBuild) and written out here as data. The shop (partsShop.js) grows her from here.
-BUILDS.sparrow = [
+BUILDS.sparrow_v1 = [ // (the Sparrow before PLAYTEST1.md P3: 11 racks; BUILDS.sparrow below is this one with config.CONTROLS.GRAB_V2 off)
   { part: 'frame', nestRise: 94, shield: { cx: 520, cy: 414, rx: 660, ry: 604 } },
   { part: 'deck', id: 'main', row: 'main', name: 'Main Deck', x0: 140, x1: 860 },
   { part: 'deck', id: 'lower', row: 'lower', name: 'Lower Deck', x0: 20, x1: 980 },
@@ -459,6 +459,23 @@ BUILDS.sparrow = [
   { part: 'vent', p: 'main', x: 400 },
   { part: 'station', n: 'Deflector', kind: 'deflector', p: 'catwalk', x: 430 },
 ];
+
+// PLAYTEST1.md P3: the decluttered Sparrow. Eleven racks in 980 px, their reach zones lying across the stations, made the phone's button change every step and name the wrong thing. Now 3 extinguishers
+// (lower 120, main 400, lower 590), 2 hammers (main 330, lower 200) and the sword at 600; the vent has moved to the fore end of the main deck and the pipe valves apart. Rule: nothing grabbable within 85 px of a station but its own ammo or coal
+// (the main hammer is at 330, not 300: 300 is 60 px from the Boiler). tools/grab-check.mjs holds her to it. config.CONTROLS.GRAB_V2.ENABLED false (NO_GRAB_V2=1 in a tool) is the old Sparrow.
+const SPARROW_RACKS = [
+  { part: 'rack', kind: 'hammer', p: 'main', x: 330 },
+  { part: 'rack', kind: 'sword', p: 'main', x: 600 },
+  { part: 'rack', kind: 'hammer', p: 'lower', x: 200 },
+  { part: 'extinguisher', p: 'lower', x: 120 },
+  { part: 'extinguisher', p: 'main', x: 400 },
+  { part: 'extinguisher', p: 'lower', x: 590 },
+  { part: 'vent', p: 'main', x: 840 },
+];
+const SPARROW_VALVES = { Helm: [470, 505], Lift: [540, 535] }; // (the two main-deck pipe valves, spread out so the sword between them has a stretch of deck of its own: v1 had them at 495 and 620)
+BUILDS.sparrow = config.CONTROLS.GRAB_V2.ENABLED
+  ? [...BUILDS.sparrow_v1.filter((q) => q.part !== 'rack' && q.part !== 'extinguisher' && q.part !== 'vent').map((q) => (q.part === 'pipe' && SPARROW_VALVES[q.to] ? { ...q, valve: SPARROW_VALVES[q.to] } : q)), ...SPARROW_RACKS]
+  : BUILDS.sparrow_v1;
 
 // ---- building the layout ---------------------------------------------------------------------------------
 

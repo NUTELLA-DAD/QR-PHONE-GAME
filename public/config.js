@@ -9,6 +9,8 @@ const ALARMS_ON = typeof process === 'undefined' || !(process.env && process.env
 const ROLE_CARDS_ON = typeof process === 'undefined' || !(process.env && process.env.NO_ROLE_CARDS);
 // F3 (FUN.md): a helm for one thumb - the stick's up/down is the pump and the vent, the speed lever is the cruise, the pressure lever a readout, the trim part of the autopilot, the SPLIT engine panel only with CONTROLS.EXPERT. ON in the game (a browser has no process); NO_HELM_V2=1 in a tool is the old helm (the seeded baselines pin it).
 const HELM_V2_ON = typeof process === 'undefined' || !(process.env && process.env.NO_HELM_V2);
+// PLAYTEST1.md P3: the button says what is in front of you - a station beats a rack unless the rack is clearly nearer, the big button takes a station with a tool in hand, and the Sparrow's racks are thinned out. ON in the game; NO_GRAB_V2=1 in a tool is the old game (the seeded baselines pin it).
+const GRAB_V2_ON = typeof process === 'undefined' || !(process.env && process.env.NO_GRAB_V2);
 // F12 (FUN.md): small ships crack castles - a ship with no bomb bay (the Sparrow) has her guns' magazines filled every time a castle shutter opens, and her gunners keep their shells for the window (RING.FAIR). ON in the game; NO_RINGFAIR=1 in a tool is the old game (the seeded baselines pin it).
 const RINGFAIR_ON = typeof process === 'undefined' || !(process.env && process.env.NO_RINGFAIR);
 // F13 (FUN.md): steam and lift - the plumbing is not wrecked by every scrape of rock, a burst pipe shuts its own valve, the pump gets the steam first while she sinks, a warning ladder (LOW ON COAL, LOW STEAM, SINKING) comes before FALLING, and the grazing rule is less trigger-happy (STEAMFIX). ON in the game; NO_STEAMFIX=1 in a tool is the old game (the seeded baselines pin it).
@@ -3917,6 +3919,10 @@ export const config = {
     GRAB_LOCK: 0.6, // seconds after any pickup / put-back / swap / station take when the host ignores more grab presses from that player (job actions are exempt)
     GRAB_HOLD: 0.35, // seconds GRAB must be held to swap, put back or replace what is in your hands (taking with empty hands is instant)
     HYSTERESIS: 15, // px: the rack / station you were already near keeps the button until another is this much closer (no flickering labels)
+    // PLAYTEST1.md P3 (people only; bots keep the old combined button): a station counts STATION_BIAS px nearer than it is, so a rack must be clearly closer to win the button; the station you already had keeps it until
+    // another is HYSTERESIS px closer (the racks' own is the number above); the big button takes a station even with a tool in hand (TOOL_TAKES_SEAT: the tool goes back on its rack, a bundle or sandbag is set down at your feet);
+    // vents and pipe valves come after stations and are turned from VALVE_REACH. With the switch BUILDS.sparrow has fewer racks (BUILDS.sparrow_v1 is the old Sparrow).
+    GRAB_V2: { ENABLED: GRAB_V2_ON, STATION_BIAS: 45, HYSTERESIS: 40, TOOL_TAKES_SEAT: true, VALVE_REACH: 40 },
     AID_GRACE: 0.25, // seconds a press may still carry the PREVIOUS button label's id (the phone pressed just before the label changed)
     BAY_JUMP_ZONE: 22, // px either side of the hatch: only here does Action say "Jump!" (the rest of the bay is for the bombardier's seat)
     HOLD_TAP: 0.25, // a hold-action released sooner than this (seconds) counts as a tap: the phone nags "keep holding"

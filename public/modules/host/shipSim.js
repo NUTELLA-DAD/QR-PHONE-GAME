@@ -159,6 +159,7 @@ export function createShipSim(world, ship, W) {
 
   const T = config.TOOLS;
   const CTL = config.CONTROLS; // phone controls: grab lockout, hold-to-swap, hysteresis (Phase C)
+  const GV2 = CTL.GRAB_V2; // PLAYTEST1.md P3: the button says what is in front of you (people only: every use of it below is guarded on !player.bot)
   const modules = createModules(ship);
   const jobFinder = createJobFinder(state);
   state.modules = modules.list;
@@ -266,10 +267,15 @@ export function createShipSim(world, ship, W) {
     const pickup = legacy ? PICKUPS.find((r) => here(r, T.REACH)) : null;
     // (carrying ammo or coal next to a gun or the boiler means load it, not swap it for a tool)
     if (pickup && !(station && (tool === 'ammo' || tool === 'coal'))) return { type: 'rack', obj: pickup, label: tool === pickup.kind ? `Put back ${pickup.kind}` : tool && tool !== 'ammo' && tool !== 'coal' ? `Swap to ${pickup.kind}` : `Take ${pickup.kind}` };
-    const vent = layout.vents.find((v) => here(v, T.REACH));
-    if (vent) return { type: 'vent', obj: vent, label: state.ventOpen[layout.vents.indexOf(vent)] ? 'Close vent' : 'Open vent' };
-    const valve = modules.list.find((m) => m.kind === 'pipe' && here(m, T.REACH));
-    if (valve) return { type: 'valve', obj: valve, label: valve.open ? 'Close valve' : 'Open valve' };
+    // (P3: a person's vents and pipe valves come AFTER the stations, below, and from VALVE_REACH; a bot's stay here)
+    const ventValve = (reach) => {
+      const vent = layout.vents.find((v) => here(v, reach));
+      if (vent) return { type: 'vent', obj: vent, label: state.ventOpen[layout.vents.indexOf(vent)] ? 'Close vent' : 'Open vent' };
+      const valve = modules.list.find((m) => m.kind === 'pipe' && here(m, reach));
+      return valve ? { type: 'valve', obj: valve, label: valve.open ? 'Close valve' : 'Open valve' } : null;
+    };
+    const vvLate = GV2.ENABLED && !player.bot;
+    if (!vvLate) { const vv = ventValve(T.REACH); if (vv) return vv; }
     if (station) {
       const gun = state.GUNS[station.n];
       if (gun && tool === (gun.type === 'flame' ? 'coal' : 'ammo') && gun.ammo < gun.max) return { type: 'load', obj: gun, station, label: (gun.type === 'flame' ? 'Fuel ' : 'Load ') + station.n }; // (a flamethrower's tank takes a sack of coal, not shells)
@@ -290,6 +296,7 @@ export function createShipSim(world, ship, W) {
       if (legacy && LOCKABLE(station.n) && !taken(station.n) && !player.mate) return { type: 'station', station, label: takeLabel(station) }; // (a ship's mate never takes a station)
       // (people can always bump a bot off a station: that is a GRAB action too, see grabsFor)
     }
+    if (vvLate) { const vv = ventValve(GV2.VALVE_REACH); if (vv) return vv; }
     if (sore) return bandageAct;
     if (fire) return { type: 'need', label: 'Need an extinguisher' };
     if (hole || hurt || gasHole || (frame && frame.hp < config.STRUCTURE.JOB_AT)) return { type: 'need', label: 'Need a hammer' };
@@ -328,7 +335,7 @@ export function createShipSim(world, ship, W) {
     if (player.lock || player.conn != null || player.fall || player.swing || player.air || isHostile(player)) return null;
     const tool = player.carry;
     const out = [];
-    const add = (act, x, key) => out.push({ act: { ...act, grab: true, swap: act.swap ?? !!tool }, x, key });
+    const add = (act, x, key, st = false) => out.push({ act: { ...act, grab: true, swap: act.swap ?? !!tool }, x, key, st });
     if (!(station && (tool === 'ammo' || tool === 'coal'))) {
       // (carrying ammo or coal next to a station means use it there, not swap it for a tool)
       for (const r of PICKUPS) {
@@ -337,22 +344,25 @@ export function createShipSim(world, ship, W) {
       }
     }
     if (station) {
-      if (station.kind === 'ammo' && tool !== 'ammo') add({ type: 'ammo', station, label: 'Grab ammo' }, station.x, 'ammo|' + station.n);
-      if (station.kind === 'coal' && tool !== 'coal' && !bunkerEmpty(state)) add({ type: 'coal', station, label: 'Grab coal' }, station.x, 'coal|' + station.n);
-      if (LOCKABLE(station.n) && !taken(station.n) && !player.mate) add({ type: 'station', station, label: takeLabel(station), swap: false }, station.x, 'station|' + station.n); // (a ship's mate never takes a station)
+      if (station.kind === 'ammo' && tool !== 'ammo') add({ type: 'ammo', station, label: 'Grab ammo' }, station.x, 'ammo|' + station.n, true);
+      if (station.kind === 'coal' && tool !== 'coal' && !bunkerEmpty(state)) add({ type: 'coal', station, label: 'Grab coal' }, station.x, 'coal|' + station.n, true);
+      if (LOCKABLE(station.n) && !taken(station.n) && !player.mate) add({ type: 'station', station, label: takeLabel(station), swap: false }, station.x, 'station|' + station.n, true); // (a ship's mate never takes a station)
       else {
         const botThere = !player.mate && Object.values(state.players).find((q) => q.bot && q.lock === station.n); // (people can always bump a bot off a station)
-        if (botThere) add({ type: 'station', station, bump: botThere, label: takeLabel(station), swap: false }, station.x, 'station|' + station.n);
+        if (botThere) add({ type: 'station', station, bump: botThere, label: takeLabel(station), swap: false }, station.x, 'station|' + station.n, true);
       }
     }
     { const un = !tool && scrapOn() ? cargo.unstowAction(player, (o, r) => o.d === player.d && Math.abs(o.x - player.x) < r) : null; if (un) add({ ...un, swap: false }, un.obj.x, 'unstow'); } // (SCRAP: GRAB at the bin takes one out)
     if (!tool && scrapOn()) for (const ld of cargo.loads()) if (ld.kind === 'scrap' && ld.d === player.d && Math.abs(ld.x - player.x) < T.REACH) add({ type: 'pickup', obj: ld, label: 'Pick up the scrap', swap: false }, ld.x, 'scrap|' + ld.id); // (SCRAP)
-    const best = sticky(player, 'grabKey', out, (o) => Math.abs(o.x - player.x), (o) => o.key);
+    // (P3: a station counts GV2.STATION_BIAS px nearer than it is, and keeps the button GV2.HYSTERESIS px longer than a rack does)
+    const bias = GV2.ENABLED ? GV2.STATION_BIAS : 0;
+    const best = sticky(player, 'grabKey', out, (o) => Math.abs(o.x - player.x) - (o.st ? bias : 0), (o) => o.key, GV2.ENABLED ? (o) => (o.st ? GV2.HYSTERESIS : CTL.HYSTERESIS) : CTL.HYSTERESIS);
     return best ? best.act : null;
   };
 
   // Nearest of list (smaller distOf wins), but the one remembered in player[field] keeps it until another is CTL.HYSTERESIS closer.
-  const sticky = (player, field, list, distOf, keyOf) => {
+  // (hyst: a number, or a function of the remembered item - a station can hold on longer than a rack, PLAYTEST1.md P3)
+  const sticky = (player, field, list, distOf, keyOf, hyst = CTL.HYSTERESIS) => {
     if (!list.length) {
       player[field] = null;
       return null;
@@ -360,7 +370,7 @@ export function createShipSim(world, ship, W) {
     let best = list[0];
     for (const o of list) if (distOf(o) < distOf(best)) best = o;
     const prev = list.find((o) => keyOf(o) === player[field]);
-    if (prev && distOf(prev) <= distOf(best) + CTL.HYSTERESIS) best = prev;
+    if (prev && distOf(prev) <= distOf(best) + (typeof hyst === 'function' ? hyst(prev) : hyst)) best = prev;
     player[field] = keyOf(best);
     return best;
   };
@@ -1090,7 +1100,7 @@ export function createShipSim(world, ship, W) {
       if (!grace) return { ok: false };
       run = m.prevAct;
     }
-    if (run && run.grab && ((player.grabLock || 0) > 0 || (slot === 'a' && player.carry))) return { ok: false };
+    if (run && run.grab && ((player.grabLock || 0) > 0 || (slot === 'a' && player.carry && !(GV2.ENABLED && GV2.TOOL_TAKES_SEAT && run.type === 'station')))) return { ok: false }; // (P3: the big button takes a seat with a tool in hand)
     return { ok: true, act: run };
   };
   // Hold actions (fire:1) count only while the id the phone held on is still what the button shows.
@@ -1234,6 +1244,12 @@ export function createShipSim(world, ship, W) {
         act.bump.fire = false;
         act.bump.x = act.station.x + 50;
       }
+      if (!player.bot && GV2.ENABLED && GV2.TOOL_TAKES_SEAT && player.carry && player.carry !== 'ammo' && player.carry !== 'coal' && player.carry !== 'chest' && player.d != null) { // (P3: a seat needs both hands: a bundle or sandbag is set down at your feet, a tool goes back on its rack)
+        const was = player.carry;
+        if (cargoItem(was)) cargo.place(was, player.d, player.x);
+        player.carry = null;
+        phoneFx(player, cargoItem(was) ? cargoItem(was).label + ' set down at your feet' : was[0].toUpperCase() + was.slice(1) + ' put back on its rack');
+      }
       player.lock = act.station.n;
       grabbed(player, false);
       player.x = act.station.x;
@@ -1371,7 +1387,7 @@ export function createShipSim(world, ship, W) {
       }
       const nearStations = !player.lock && player.conn == null && !(player.on && player.on.away) ? layout.stations.filter((s) => s.d === player.d && Math.abs(player.x - s.x) < T.STATION_REACH) : [];
       // (people keep the station they were already at until another is clearly closer; bots just take the nearest)
-      const station = player.bot ? nearStations.sort((a, b) => Math.abs(player.x - a.x) - Math.abs(player.x - b.x))[0] || null : sticky(player, 'stKey', nearStations, (s) => Math.abs(player.x - s.x), (s) => s.n);
+      const station = player.bot ? nearStations.sort((a, b) => Math.abs(player.x - a.x) - Math.abs(player.x - b.x))[0] || null : sticky(player, 'stKey', nearStations, (s) => Math.abs(player.x - s.x), (s) => s.n, GV2.ENABLED ? GV2.HYSTERESIS : CTL.HYSTERESIS);
 
       if (!player.lock) player.prime = false;
       if (player.hj) {
@@ -1559,6 +1575,8 @@ export function createShipSim(world, ship, W) {
         if (!player.bot) {
           // Empty hands and nothing to use: the first pickup is on the big button too (with something in hand it never swaps or drops).
           if ((!act || act.type === 'need') && !player.carry && grabAct) act = grabAct;
+          // P3: a station is on the big button even with a tool in hand, and ahead of a vent or valve beside it.
+          else if (GV2.ENABLED && grabAct && grabAct.type === 'station' && (!act || act.type === 'need' || act.type === 'vent' || act.type === 'valve') && (!player.carry || GV2.TOOL_TAKES_SEAT)) act = grabAct;
           trackAid(player, 'a', act);
           trackAid(player, 'g', grabAct);
         }
