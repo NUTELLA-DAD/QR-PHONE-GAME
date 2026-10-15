@@ -310,9 +310,9 @@ const flat = (parts) => buildLayout(parts);
 // ---------------------------------------------------------------- 7. the Ship button and the power scale
 {
   const sim = createSimulation(), BC = config.VOYAGE.START_BUILD_BY_CREW;
-  report(BC.small === 'raft' && BC.big === 'classic', `Auto: ${BC.small} for ${BC.max} crew or fewer, ${BC.big} for more`);
-  sim.setStartBuild('raft', 'auto');
-  report(sim.state.startBuild === 'raft' && sim.state.startBuildAuto && sim.pickStartBuild() === 'raft', 'Auto picks the raft for a small crew');
+  report((BC.small === 'raft' || BC.small === 'sparrow') && BC.big === 'classic', `Auto: ${BC.small} for ${BC.max} crew or fewer, ${BC.big} for more`);
+  sim.setStartBuild(BC.small, 'auto'); // (the lead keeps Auto on the Sparrow until the raft is balanced: the raft is chosen on the Ship button)
+  report(sim.state.startBuild === BC.small && sim.state.startBuildAuto && sim.pickStartBuild() === BC.small, 'Auto picks ' + BC.small + ' for a small crew');
   const cycle = [];
   for (const id of ['raft', 'sparrow', 'classic']) { sim.setStartBuild(id); cycle.push(sim.state.startBuild + (sim.state.startBuildAuto ? '+auto' : '')); }
   report(cycle.join() === 'raft,sparrow,classic', `the Ship button's choices set a start ship each (${cycle.join(' > ')})`);

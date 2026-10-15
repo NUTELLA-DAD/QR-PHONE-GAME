@@ -1004,7 +1004,7 @@ export const config = {
     START_BUILD: 'sparrow', // the ship a Voyage / Quick / Campaign starts with in the browser host ('classic' = the old full ship; the pause menu toggles it). Headless tools stay on the classic ship unless they ask (sim.setStartBuild)
     // F1 (FUN.md): in the browser host the start ship follows the crew size at CAST OFF unless the Ship button (or ?ship=) has forced one: a crew of MAX or fewer gets the Sparrow, a bigger one the classic ship (simulation.js castOff, pickStartBuild).
     // A tool that asks for a build with sim.setStartBuild(id) has forced it. ENABLED false = the Ship button's saved choice (or START_BUILD) always wins, as before.
-    START_BUILD_BY_CREW: { ENABLED: true, max: 6, small: RAFT_ON ? 'raft' : 'sparrow', big: 'classic' }, // (P5: a small crew starts on the tiny RAFT, config.RAFT; the Ship button also offers the Sparrow and the classic as QUICK STARTs)
+    START_BUILD_BY_CREW: { ENABLED: true, max: 6, small: 'sparrow', big: 'classic' }, // (P5: a small crew starts on the tiny RAFT, config.RAFT; the Ship button also offers the Sparrow and the classic as QUICK STARTs)
     // The harder second voyage of the Evening Campaign, started after the first Flagship falls.
     SECOND: {
       DANGER_BONUS: 1, // every stop (and the Flagship) is this many skulls harder (danger may go above 3)
