@@ -18,6 +18,8 @@ const AWAY_ON = typeof process === 'undefined' || !(process.env && process.env.N
 const AWAY_BOT_TRIPS_ON = typeof process !== 'undefined' && !!(process.env && process.env.AWAY_BOT_TRIPS);
 // C.6f (BOSSES.md 2.6): the Void Eel joins the Flagship's fight at the end of a voyage (CREATURES.EEL.FINALE). ON in the game (a browser has no process); a Node tool keeps it OFF unless WITH_EEL=1, so every seeded baseline (botsim, golden, frames, the voyage gates) is the game it was. The dev lair (?creature=eel, botsim --creature eel) works either way.
 const EEL_FINALE_ON = typeof process === 'undefined' || !!(process.env && process.env.WITH_EEL);
+// G5 / G6 (LOOP.md): derelicts you board and strip for named parts, and the two stops that are about them (SALVAGE RUN: strip the wrecks before the storm; DEFEND: hold a stranded balloon against the bats). ON in the game; NO_DERELICTS=1 in a tool is the old game (no wrecks, the old beacon salvage run, no DEFEND stop). The seeded baselines pin the away team off (NO_AWAY=1), which turns all of it off too.
+const DERELICT_ON = typeof process === 'undefined' || !(process.env && process.env.NO_DERELICTS);
 export const config = {
   W: 1600,
   H: 900,
@@ -1073,7 +1075,7 @@ export const config = {
       fungal: { name: 'Fungal Depths', icon: '🍄', color: '#8a6fb0', ready: true },
       aether: { name: 'The Aether', icon: '🌌', color: '#4b3f7a', ready: true },
     },
-    KIND_NAMES: { network: 'Cave run', route: 'Narrow pass', open: 'Outpost raid', ring: 'Ring assault', lair: 'Kraken lair', salvage: 'Salvage run' }, // (lair: a Sunken Sea stop with a giant creature, config.CREATURES.LAIR)
+    KIND_NAMES: { network: 'Cave run', route: 'Narrow pass', open: 'Outpost raid', ring: 'Ring assault', lair: 'Kraken lair', salvage: 'Salvage run', defend: 'Defend the balloon' }, // (lair: a Sunken Sea stop with a giant creature, config.CREATURES.LAIR)
   },
   // Fires.
   // S.5f: fire cares where things are (modules/host/fireModel.js reads this; fire.js runs it). Every spot of the ship has a flammability: a covered wooden deck is 1 (medium),
@@ -1515,6 +1517,46 @@ export const config = {
       SEEK: 3000, // px: the phone's arrow points at a chest this near the man
       BOT: { VAULT_CALL: 120, RANGE: 1500, TIME: 75 }, // tools (BOT_TRIPS): the bot helm hovers over an open vault for at most VAULT_CALL s; a trip starts for a chest within RANGE px of the rope; a tripping bot gives up after TIME s
     },
+  },
+  // DERELICTS, STRIPPING AND NAMED PARTS (LOOP.md G5) and the two stops about them (G6: SALVAGE RUN, DEFEND); host/derelicts.js, stopGoals.js, derelictArt.js. ENABLED false (NO_DERELICTS=1 in a tool) = the old game.
+  //   A DERELICT is a wrecked airship that drifts slowly in the open sky of some stops (every SALVAGE RUN has three). Its deck is a platform of the away team (3 or more crew, AWAY.MIN_CREW): hook it, drop onto it with a parachute or let the rope
+  //   ladder down while the helm hovers over it, walk it, and hold Action at a PART (a gun, a lamp, an engine ...): after STRIP.TIME s it comes unbolted and is a CRATE in your arms (carried like a treasure chest: heavy, up the rope, STOW in the
+  //   hold). Every crate brought aboard is a NAMED PART CARD at the next dock - "the Kestrel's long gun", with who stripped it - cheap, and the stripping pays a little salvage and a bundle of scrap. Every stop is still won from the ship.
+  //   SALVAGE RUN (stop.salvage on a field map): strip RUN.NEED parts from the wrecks before RUN.TIME s (the storm) are up. DEFEND (stop.defend): a stranded supply balloon, hold it for DEFEND.TIME s against bat waves.
+  DERELICT: {
+    ENABLED: DERELICT_ON,
+    SPAWN: { CHANCE: 0.4, FROM_COLUMN: 1, SHOW: 6500, MAX: 1 }, // a wreck on an ordinary open-sky stop: the chance (a hash of the stop, no random numbers), not before this column (0-based), the TV announces it from this far (px), at most this many
+    W: [560, 760], // a wreck's deck length (px)
+    FRAME: 3000, // the TV's camera keeps a wreck this near the ship (px along the sky) in the picture
+    HOVER_REF: 600, // the ship's reference point hovers this high over the deck when she works the wreck (the route's goal for the bot helm; the rope ladder reaches from there)
+    DRIFT: 7, DRIFT_RANGE: 1500, // px/s a wreck drifts along the sky; it turns round when it is this far (px) from where it hangs
+    PARTS: { MIN: 2, MAX: 3 }, // parts to strip on one wreck
+    KINDS: [ // what a wreck carries: the Yard's catalogue id, what the crew call it, a weight for the dice
+      { id: 'gun', label: 'gun mount', w: 3 }, { id: 'gun_long', label: 'long gun', w: 2 }, { id: 'gun_mortar', label: 'mortar', w: 1.2 }, { id: 'gun_scatter', label: 'grapeshot gun', w: 1 }, { id: 'gun_flak', label: 'flak gun', w: 1 },
+      { id: 'lamp', label: 'searchlight', w: 2 }, { id: 'armour', label: 'armour plate', w: 1.5 }, { id: 'sail', label: 'mast and sail', w: 1 }, { id: 'engine', label: 'engine pod', w: 1.5 },
+    ],
+    NAMES: ['Kestrel', 'Grey Heron', 'Marigold', 'Tern', 'Albatross', 'Curlew', 'Plover', 'Merlin', 'Bittern', 'Osprey', 'Cormorant', 'Linnet', 'Nightjar', 'Sandpiper', 'Whimbrel', 'Fulmar'], // fictional ships, named for birds
+    STRIP: { TIME: 3, REACH: 95, HEIGHT: 140, DECAY: 0.8 }, // seconds of holding Action at a part; how close (sideways) and how high above the deck a man may be; a bar nobody holds runs back this much of a full bar per second
+    CRATE: { W: 5, PAY: 6, BUNDLES: 1 }, // a stripped part in the hold or in your arms weighs this on the lift (a chest is 6); salvage paid for each brought aboard; scrap bundles added to the hold when it is stowed
+    SURPRISE: { CHANCE: 0.45, KINDS: ['cache', 'survivor', 'nest'], CACHE: { PAY: 12, TIME: 2 }, SURVIVOR: { PAY: 10, TIME: 2 }, NEST: { BATS: 4 } }, // a light extra on a wreck (a hash of the stop): a locker with coins in it (salvage), a stranded sailor to free (salvage), a bat nest that bursts out when the first part comes loose
+    NAMED: { COST_SHARE: 0.35, MAX_PENDING: 3, TAG: 'STRIPPED' }, // a named card costs this share of the part's Yard price (it was stripped, not bought); no more than this many wait for a dock; the badge on the card
+    SINK_AFTER: 12, // s after the objective ends (or the stop ends) the wrecks go down: nothing is left to strip
+    RUN: { // SALVAGE RUN, the catch-up stop
+      ENABLED: true, NEED: 3, NEED_BIG: 4, BIG_CREW: 10, TIME: 210, WARN: 40, EARLY_AFTER: 8, // parts to bring aboard (one more for a crew of BIG_CREW or more); the storm arrives after TIME s; the banner warns WARN s before; the run ends at once when too few parts are left to be enough, from EARLY_AFTER s in
+      DERELICTS: 3, FIELD: { WIDTH: 120, HEIGHT: 46, ISLANDS: 3, AT: [0.28, 0.52, 0.76] }, // wrecks on the field; the map's size (squares) and where along it the wrecks hang (shares of the width)
+      WIN_BONUS: 30, FAIL_REWARD: 0.6, // salvage for the objective done; the stop's reward is this share when the storm takes the wrecks (the voyage goes on all the same)
+      RATE_MUL: 0.5, // the pacing director's speed there (lighter than the old salvage run's 0.7: the crew is on foot)
+    },
+    DEFEND: { // DEFEND the stranded balloon (voyage.js marks one stop of a long voyage)
+      ENABLED: true, CHANCE: 0.55, FROM_COLUMN: 2, MIN_STOPS: 6, // the chance a voyage has one; not before this column (0-based); not in a route shorter than this many stops flown
+      FIELD: { WIDTH: 90, HEIGHT: 46, ISLANDS: 3, AT: 0.55 }, // the map's size (squares); where the balloon hangs (a share of the width)
+      TIME: 85, HP: 220, WIN_BONUS: 35, FAIL_REWARD: 0.6, // seconds to hold; the balloon's hit points; salvage for holding it; the stop's reward share when it is lost
+      ARRIVE: 3600, ARRIVE_MAX: 70, // the clock and the first wave wait until the ship is this near the balloon (px), or this many seconds have gone
+      WAVES: { FIRST: 7, EVERY: 13, BATS: [3, 4, 4, 5, 6], SPAWN: 1900, SPREAD: 500, HEIGHT: 700, LAST_CUT: 0.4, GNAW: 1.2, HIT: 3 }, // (SPREAD: how far apart along the sky the bats start, px; HEIGHT: how far apart in height; LAST_CUT: no new wave when less than this share of EVERY is left on the clock) the first wave after FIRST s, then every EVERY s with this many bats (the last number repeats); they come SPAWN px out; a bat on the balloon eats GNAW hp/s each; a bat that reaches it bites HIT hp at once
+      RATE_MUL: 0.35, GATES: ['swarm'], // the director's speed and its set pieces there (bats only; the balloon's waves are the fight)
+      SUPPLY: true, // holding it calls the supply balloon (hull, coal, shells) as a thank-you
+    },
+    BOTS: { IN_RUN: true, MAX_AWAY: 2, EVERY: 4, TIME: 80, RANGE: 1100, CALL: 120, CALL_RANGE: 3500 }, // bots go on foot to strip in a SALVAGE RUN (also without AWAY.BOT_TRIPS): at most this many away at once, a new trip at most every EVERY s; one gives up after TIME s; they go for a part this near the rope (px); tools (BOT_TRIPS): the bot helm hovers over a wreck at most CALL s, when it is within CALL_RANGE px
   },
   // Enemy waves (bat swarms and bombers) and the Dread Zeppelin boss.
   WAVES: {
@@ -2510,6 +2552,7 @@ export const config = {
       'creature-light': 4, 'creature-burn': 4, 'creature-cap': 4, // C.6e: the Mycelial Mother - the first lamp that found her in the dark, a tendril that went up in flames, a mortar shell on her cap
       'creature-lure': 5, 'creature-dodge': 4, 'creature-fled': 10, // C.6f: the Void Eel - the lookout who called the lure, a swallow the helm dodged, the Flagship that fled when the eel died
       'creature-chip': 3, 'creature-thaw': 3, // C.6d: the Rime Wyrm - a hammer chipped the ice off its coil, or thawed a gun it had frozen
+      'derelict-boarded': 4, 'derelict-stripped': 5, 'derelict-hauled': 6, 'derelict-rescue': 6, 'named-part': 6, 'salvage-won': 8, 'salvage-lost': 3, 'defend-won': 8, 'defend-lost': 3, 'defend-saved': 5, // G5 / G6: the first man on a wreck, a part unbolted, brought aboard, a sailor freed, a named card bolted on; a salvage run and a defend stop won or lost; a wave beaten off the balloon
       'helm-held': 5, limp: 5, 'breakoff-bay': 5, breakoff: 4, 'creature-freed': 4, 'revive-fire': 4, rebuild: 3, 'gunship-fled': 3, 'nemesis-down': 10, 'nemesis-won': 9, 'nemesis-escape': 6, 'nemesis-scar': 5, 'nemesis-met': 4, 'boarding-kill': 3, 'cannon-miss': 3, sandbag: 3, 'scrap-first': 3, 'scrap-hook': 3, 'scrap-patch': 7, 'scrap-built': 4, 'frame-built': 6, 'hulk-hauled': 5, 'scrap-dumped': 4, 'escort-crash': 3, 'fire-first': 2, overboard: 2,
     },
     OVERBOARD_PLUS: 1, OVERBOARD_MAX: 4, // an overboard moment weighs WEIGHT.overboard + this per earlier fall of the same person this run, up to this many extra
@@ -3967,7 +4010,8 @@ export const config = {
     COAL_LOW: 30, // boiler fuel below this percent is worth a coal run
     CLAIM_PENALTY: 1.2, // each other crewmate already going to the same job adds this to its (distance-weighted) score
     // How much each kind of job matters (bigger = pulls harder; score = seconds of walking / this).
-    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, heal: 3.5, bandage: 1.3, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, help: 8, trim: 0.9, sail: 1.3, reef: 3, shovel: 1.5, hack: 3.4, frame: 1.9, stow: 1.4, hulk: 1.5, scrappatch: 2.2, scrapgrab: 2, buildframe: 1.7, buildgrab: 1.6 },
+    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, heal: 3.5, bandage: 1.3, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, help: 8, trim: 0.9, sail: 1.3, reef: 3, shovel: 1.5, hack: 3.4, frame: 1.9, stow: 1.4, hulk: 1.5, scrappatch: 2.2, scrapgrab: 2, buildframe: 1.7, buildgrab: 1.6,
+      derelict: 1.2 }, // (G5: a wreck is under the rope ladder with parts to strip)
   },
   SPECIES: {
     bulldog: { fur: '#b08a62', ear: 'floppy' },

@@ -40,6 +40,29 @@ export function createTreasureArt({ ctx, world, ink }) {
       ctx.restore();
       return;
     }
+    if (kind === 'part') { // (LOOP.md G5, derelicts.js: a part stripped off a wreck: a grey iron crate with a bolt plate and a gear)
+      ctx.fillStyle = '#8f9aa3';
+      rr(x - 32 * s, y - 40 * s, 64 * s, 40 * s, 3 * s);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = IRON;
+      ctx.lineWidth = 5 * s;
+      ctx.beginPath();
+      ctx.moveTo(x - 18 * s, y - 40 * s);
+      ctx.lineTo(x - 18 * s, y);
+      ctx.moveTo(x + 18 * s, y - 40 * s);
+      ctx.lineTo(x + 18 * s, y);
+      ctx.stroke();
+      ink();
+      ctx.lineWidth = 3 * s;
+      ctx.fillStyle = glint ? '#fff2b0' : '#c9d3da';
+      ctx.beginPath();
+      ctx.arc(x, y - 22 * s, 10 * s, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
     ctx.fillStyle = WOOD;
     rr(x - 32 * s, y - 38 * s, 64 * s, 38 * s, 4 * s);
     ctx.fill();
@@ -140,7 +163,7 @@ export function createTreasureArt({ ctx, world, ink }) {
     const at = (x, y) => (proj ? proj(x, y) : { x, y, u: tu, w: 1 + (tu - 1) * 0.6 }); // (zoomed out, the shapes grow a little with the words so a chest still reads from the sofa)
     const labelled = new Set();
     for (const p of Object.values(world.players)) {
-      if (!p.on || !p.on.away || p.on.mode !== 'walk' || p.on.deck) continue;
+      if (!p.on || !p.on.away || p.on.mode !== 'walk' || (p.on.deck && !p.on.deck.derelict)) continue; // (a wreck's deck has crates lying on it too)
       let best = null;
       for (const c of t.chests) if (c.state === 'ground' && Math.abs(p.x - c.x) < K.REACH && (!best || Math.abs(p.x - c.x) < Math.abs(p.x - best.x))) best = c;
       if (best) labelled.add(best);

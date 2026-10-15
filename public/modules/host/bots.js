@@ -277,6 +277,7 @@ function gunReach(state, n) {
   }
   const best = bestTarget(state, state.GUNS[n]);
   if (best && best.target.kind === 'flier') return 0.5; // (an enemy in the air: a flak gun's whole job)
+  if (best && best.target.kind === 'bat' && best.target.obj && best.target.obj.goal) return 0.45; // (G6 DEFEND: a bat on its way to the stranded balloon, or on it, eating it: a gun is manned for that before any chore)
   if (best && best.target.kind === 'laid') return 0.6; // (a mine in the way: shoot it before it is a hole in the hull)
   if (best && best.target.kind === 'creaturePart' && best.target.rank < 9 && state.creature && state.creature.kind === 'wyrm') return 0.6; // (C.6d: a BARE segment of the Rime Wyrm, or its open maw, is worth a gun: a shell on ice only bounces)
   // Paratroopers are about to jump (or are in the air): get up to the dorsal gun, it covers their approach.
@@ -2004,7 +2005,7 @@ function ringForceBoard(p, state) {
 // lowers the ladder and climbs down; from then on ground.js step() drives him (a walk to the plaza's middle, a look round, a flare, the climb home). True = this bot is on a trip.
 function awayTrip(p, state, dt) {
   const g = state.groundSys;
-  if (!g || !config.AWAY.BOT_TRIPS) return false;
+  if (!g || !(config.AWAY.BOT_TRIPS || g.der.botsGo())) return false; // (G5: also in a SALVAGE RUN, where the bots strip the wrecks)
   if (p.on && p.on.away) return true;
   if (!p.trip) {
     if (!g.tripWanted(p)) return false;
@@ -2041,7 +2042,9 @@ export function updateBot(p, state, dt) {
   if (config.CREATURES.FORCE_WIN === 'board' && forceBoard(p, state)) return; // (C.3 dev flag)
   if (config.RING.FORCE_BOARD && ringForceBoard(p, state)) return; // (R0 dev flag)
   if (p.on && p.on.away) return; // (A0: a bot on the ground is driven by ground.js, never by the brain below)
-  if (config.AWAY.BOT_TRIPS && awayTrip(p, state, dt)) return; // (A0, tools only)
+  { const tripsOn = config.AWAY.BOT_TRIPS || (state.groundSys && state.groundSys.der.botsGo()); // (A0, tools only; G5: and a SALVAGE RUN)
+    if (tripsOn && awayTrip(p, state, dt)) return;
+    if (!tripsOn && p.trip && !(p.on && p.on.away)) p.trip = null; } // (the run ended before he got down the ladder)
   // A daring stunt takes over the bot until it is safely back on a deck.
   if (p.dare) {
     if (dareStep(p, state, dt)) return;

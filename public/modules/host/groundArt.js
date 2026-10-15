@@ -331,7 +331,7 @@ export function createGroundArt({ ctx, world, ink }) {
   const drawGround = () => {
     const S = world.away;
     if (!S || !S.on) return;
-    for (const dk of S.decks) plank(dk.x0, dk.y, dk.x1, dk.y, 1);
+    for (const dk of S.decks) if (!dk.derelict) plank(dk.x0, dk.y, dk.x1, dk.y, 1); // (a wreck draws its own deck, derelictArt.js)
     for (const l of S.ladders) ladder(l.x, l.y0 + 6, l.x, l.y1, 1, 46);
   };
   // The 2D world pass over the ships (render.js, after the crew in the air): the rope ladder, the flares and the pickup markers, in world units. tu = the words' scale.

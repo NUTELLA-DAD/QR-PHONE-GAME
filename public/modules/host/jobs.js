@@ -42,6 +42,7 @@ JOB_COLORS.scrapgrab = '#ffd23f'; // (...first take one out of the hold bin)
 JOB_COLORS.buildframe = '#ffd23f'; // (LOOP.md G4, frames: carry a bundle to the scaffold of a part the crew bought and build it - gold)
 JOB_COLORS.buildgrab = '#ffd23f'; // (...first take one out of the hold bin)
 JOB_COLORS.stowchest = '#ffd23f'; // (CASTLE.md A2: a chest from an outpost's vault goes in the hold - gold)
+JOB_COLORS.derelict = JOB_COLORS.strip = '#7fb2d9'; // (LOOP.md G5: a wreck to strip - steel blue)
 JOB_COLORS.hack = '#f2c14e'; // (C.2: a tentacle holds the ship: gold arrow to the grip point, sword in hand)
 JOB_COLORS.pickup = '#ff8c1a'; // (CASTLE.md A0: an away man's flare: the helm hovers over him and the rope ladder takes him up)
 
@@ -109,6 +110,7 @@ export function createJobFinder(state) {
       }
     }
     if (p.carry === 'chest' && !me.ai && holdSpot(L) && state.away && state.away.tre && state.away.tre.chests.some((c) => c.state === 'aboard' && c.by[0] === p.id)) add('stowchest', 'hold', holdSpot(L).d, holdSpot(L).x, { urgency: J.URGENCY.stow }, `STOW THE CHEST - ${roomName(holdSpot(L).d, holdSpot(L).x)}`); // (CASTLE.md A2: a chest in your arms goes in the hold)
+    { const dj = me.main && state.groundSys && state.groundSys.der ? state.groundSys.der.shipJob(p) : null; if (dj) add('derelict', 'derelict', dj.d, dj.x, {}, dj.label); } // (LOOP.md G5: a wreck hangs under the rope ladder with parts left: the arrow goes to the hatch)
     for (const f of state.fires) add('fire', f, f.d, f.x, {}, f.h2 ? `FIRE UNDER THE HYDROGEN BAG - ${roomName(f.d, f.x)}` : undefined); // (GAS TYPES: a fire that reaches a hydrogen bag says so)
     for (const h of state.breaches) add('hole', h, h.d, h.x);
     const S = me.sim && me.sim.structure; // STRUCTURE.md: a segment of the frame below JOB_AT wants shoring up with a hammer (a critical one is worth far more)

@@ -12,6 +12,7 @@ import { createCrewArt } from './crewArt.js';
 import { createCourseArt } from './courseArt.js';
 import { createGroundArt } from './groundArt.js'; // (CASTLE.md A0: the away team's ladders, flares and pickup marker)
 import { createTreasureArt } from './treasureArt.js'; // (CASTLE.md A2: the outposts' vaults, chests and guards)
+import { createDerelictArt } from './derelictArt.js'; // (LOOP.md G5 / G6: the wrecks you strip and the stranded balloon)
 import { createRingArt } from './ringArt.js'; // (the orbit finale drawn flat: castle faces, shutters, the ring dial; R0)
 import { createSkyArt } from './skyArt.js';
 import { createEnvArt } from './envArt.js';
@@ -141,6 +142,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
   const ringArt = createRingArt({ ctx, state, ink });
   const groundArt = createGroundArt({ ctx, world, ink }); // (CASTLE.md A0: the walkways, the wall ladders, the rope ladder, the flare and the pickup marker)
   const treasureArt = createTreasureArt({ ctx, world, ink }); // (CASTLE.md A2: the vaults, the chests, the guards)
+  const derelictArt = createDerelictArt({ ctx, world, ink }); // (LOOP.md G5 / G6: the wrecks, their parts, the balloon of a DEFEND stop)
   const spotterArt = createSpotterArt({ ctx, state }); // spotted-target brackets (HELP! call-outs and primed-gun glows are the ships': artsOf)
   const linkArt = createLinkArt({ ctx, state }); // gust / updraft arrows (the loader and lookout wires are the ships': artsOf)
   const healthArt = createHealthArt({ ctx }); // crew health: heart pips over a hurt crewman
@@ -1417,6 +1419,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       ctx.lineWidth = 2;
       ctx.stroke();
     }
+    derelictArt.mini(px, py); // (G5 / G6: the wrecks and the balloon)
     // Beacon (cave missions).
     const gx = px(map.goal.x);
     const gy = py(map.goal.y);
@@ -1442,6 +1445,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     const km = Number.isFinite(dCells) ? (dCells * map.CELL) / config.MAPS.KM : null;
     let goalText;
     if (map.ring && c.ring) goalText = c.done ? map.ring.name + ' HAS FALLEN!' : c.ring.crown ? map.ring.name + ' FALLS!' : (c.ring.moor && state.boss ? 'MOORINGS ' + c.ring.moor.cut.filter(Boolean).length + '/' + c.ring.moor.cut.length + ' - ' : '') + 'GATES ' + c.ring.faces.filter((f) => f.down).length + '/' + c.ring.faces.length + (km === null ? '' : km < 0.5 ? ' - FIRE!' : ' - next ' + km.toFixed(1) + ' km');
+    else if (map.field && c.goal) goalText = derelictArt.goalText(c, km); // (G6: a salvage run's parts and storm clock, or the balloon's hit points)
     else if (c.done) goalText = map.lair ? (map.creature === 'eel' ? 'THE VOID EEL IS SLAIN!' : map.creature === 'mother' ? 'THE MYCELIAL MOTHER IS SLAIN!' : map.creature === 'wyrm' ? 'THE RIME WYRM IS SLAIN!' : map.creature === 'titan' ? 'THE ISLAND TITAN IS SLAIN!' : map.creature === 'thunderbird' ? 'THE THUNDERBIRD IS SLAIN!' : map.creature === 'drake' ? 'THE DRAKE IS SLAIN!' : 'THE KRAKEN IS SLAIN!') : map.open ? 'ALL OUTPOSTS DOWN!' : 'BEACON REACHED!';
     else if (map.lair) goalText = state.creature ? (map.creature === 'eel' ? 'SLAY THE VOID EEL!' : map.creature === 'mother' ? 'SLAY THE MYCELIAL MOTHER!' : map.creature === 'wyrm' ? 'SLAY THE RIME WYRM!' : map.creature === 'titan' ? 'SLAY THE ISLAND TITAN!' : map.creature === 'thunderbird' ? 'SLAY THE THUNDERBIRD!' : map.creature === 'drake' ? 'SLAY THE DRAKE!' : 'SLAY THE KRAKEN!') : (map.creature === 'eel' ? "THE EEL'S LAIR" : map.creature === 'wyrm' ? "THE WYRM'S LAIR" : map.creature === 'titan' ? "THE TITAN'S LAIR" : map.creature === 'thunderbird' ? "THUNDERBIRD'S LAIR" : map.creature === 'drake' ? "DRAKE'S LAIR" : "KRAKEN'S LAIR") + (km === null ? '' : ' - ' + km.toFixed(1) + ' km');
     else if (map.open) {
@@ -3629,7 +3633,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       }
       try { // (A0: the 3D castle has no ladders, rope, flare or pickup ring of its own yet - A3 - so the HUD draws them through the camera: the walkways and wall ladders, the rope ladder, a lit flare, the pickup marker)
         const S = world.away;
-        if (S && S.on) {
+        if (S && (S.on || (world.course && world.course.goal && world.course.goal.kind === 'defend'))) { // (G6: a DEFEND stop draws its balloon even with too few crew for an away team)
           ctx.setTransform(1, 0, 0, 1, 0, 0);
           const pt = (x, y) => proj([x, -y, 60]);
           const px = (x, y) => { const a = pt(x, y), b = pt(x + 100, y); return a && b ? Math.max(0.3, Math.hypot(b.x - a.x, b.y - a.y) / 100) : 0.5; };
@@ -3645,6 +3649,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
             for (const f of S.flares) { const a = pt(f.x, f.y); if (a) groundArt.flare(a.x, a.y, zs * 0.9, K8, f.name, zs, px(f.x, f.y)); }
           }
           groundArt.drawObjectives(K8 / 8, zs, (x, y) => { const a = pt(x, y); return a ? { x: a.x, y: a.y, u: zs * 0.85, w: Math.max(0.35, px(x, y)) * 1.1 } : null; }, A3); // (CASTLE.md A1: the objectives' markers, the prisoners and the carried banner, through the camera)
+          derelictArt.draw(K8 / 8, zs, (x, y) => { const a = pt(x, y); return a ? { x: a.x, y: a.y, u: zs * 0.85, w: Math.max(0.35, px(x, y)) * 1.1 } : null; }, true); // (G5 / G6: no wreck or balloon model in 3D yet: the HUD draws a stand-in through the camera)
           treasureArt.draw(K8 / 8, zs, (x, y) => { const a = pt(x, y); return a ? { x: a.x, y: a.y, u: zs * 0.85, w: Math.max(0.35, px(x, y)) * 1.1 } : null; }, !!(p3.treasure && p3.treasure())); // (CASTLE.md A2: the vaults, chests and guards, through the camera; while the 3D view draws the vault, chests and sacks only their words, the grab bar and the guards stay here)
         }
       } catch (e) { /* (a nicety: never stop the frame) */ }
@@ -3939,6 +3944,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     const everyShip = (fn) => eachShip(world, (sh, i) => withShip(sh, () => fn(sh, i)));
     if (has('ship')) {
       drawCreatureBehind(wv); // (C.2: the coils of a tentacle that pass behind her hull)
+      derelictArt.draw(ts, Math.max(1, Math.min(3, 0.8 / (view.zoom || 0.5)))); // (G5 / G6: the wrecks and the stranded balloon, behind her)
       everyShip(drawShipLayer);
       if (world.gunship && world.gunship.asShip) drawGunship.rope(world.gunship, ts); // (the gunship's grapple line runs between two ships: it is drawn in the world)
       if (world.debris && world.debris.length) debrisArt.draw(); // (S.5i: broken-off parts tumble in the world)
