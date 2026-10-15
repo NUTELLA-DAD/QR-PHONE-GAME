@@ -11,7 +11,14 @@
 //   5  pressing: the big button with a hammer in hand takes the seat (the hammer goes back, nothing is lost); with scrap in hand it is set down as a load at his feet (and can be picked up again)
 //   6  the classic ship's labels at her stations (this gate's own fixture: every seat of hers named within 25 px, with and without a hammer)
 //   7  the switch: GRAB_V2 off and the old Sparrow = the old game (a hammer in hand never takes the seat); the old Sparrow's flickers are counted for the record
-//   P4 (ladders that catch you) adds its sections at the bottom, with the same boot() / person() / sweep() / idOf().
+//   P4 (PLAYTEST1.md "Ladders that catch you"; nav.js moveWalker / ladderEnd, shipSim.js climbOffer, config.NAV.LADDER) adds sections 8-14 at the bottom:
+//   8  a person at 0 / 30 / 60 px from a ladder's foot pushing straight up is on it inside 0.5 s; at 90 px he is not (and no ladder is a pole)
+//   9  a diagonal push (as much up as sideways) from 60 px grabs; a mostly sideways one walks past
+//  10  at the top of a ladder a sideways push lands him on that deck (and the ladder does not catch him straight back); the same at the bottom
+//  11  the big button says CLIMB UP / CLIMB DOWN near a ladder and the phone's ui carries "up" (the hint "Push UP to climb")
+//  12  a bot keeps the 38 px grab (30 px grabs, 60 px does not), a raider the same (nav.moveWalker without the person flag)
+//  13  the pole still slides: pushing down near its top carries him to the deck below, and a pole cannot be climbed back up
+//  14  the switch: NAV.LADDER.ENABLED off = the old 38 px grab, no CLIMB label, no step-off
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { installShims, seedRandom, publicDir } from './shims.mjs';
@@ -83,6 +90,7 @@ function sweep(sim, p, x0, x1, dir, carry, fn = null, stepPx = STEP) {
     const row = [p.x, idOf(p.act), idOf(p.grabAct)];
     row[3] = row[1]; // (the label as the phone has it, for the misses; the flicker count below sees a bundle's DUMP at a rail as no label: it is a rule of its own)
     if (carry === 'scrap' && row[1].startsWith('dump')) row[1] = '-';
+    if (row[1] === 'climb') row[1] = '-'; // (P4: CLIMB is a hint for a ladder that fills an empty button; it is no job, and a seat or a rack beside a ladder takes it over)
     log.push(row);
     if (fn) fn(p.x, row[3], row[2], p);
   }
@@ -253,7 +261,132 @@ const sparrow = boot({ startBuild: 'sparrow' });
   G.ENABLED = true;
 }
 
-// ---- P4 (ladders that catch you) adds its sections here: boot({ startBuild: 'sparrow' }), person(), sweep(), step(), idOf() are defined above ----
+// ---------------------------------------------------------------- P4 (ladders that catch you)
+const NL = config.NAV.LADDER;
+{
+  const { sim, st, ours } = boot({ startBuild: 'sparrow' });
+  const L = ours.layout, nav = ours.nav;
+  step(sim, 60);
+  const lowerD = L.platforms.findIndex((q) => q.id === 'lower'), mainD = L.platforms.findIndex((q) => q.id === 'main');
+  const foot = L.connectors.findIndex((c) => c.type === 'ladder' && c.bottom === lowerD && c.top === mainD); // (the Sparrow's ladder between her two big decks)
+  const c = L.connectors[foot];
+  // push (jx, jy) from `off` px beside the foot of ladder `foot` for up to `secs` seconds; returns { t (seconds until he is on it, or -1), p }
+  const push = (off, jx, jy, secs = 0.5, id = 'climber') => {
+    delete st.players[id];
+    const p = person(st, ours, id, lowerD, c.xBottom + off);
+    step(sim, 4);
+    p.x = c.xBottom + off; p.jx = jx; p.jy = jy;
+    let t = -1, gx = null, prev = p.x;
+    for (let i = 0; i < secs * 60 && t < 0; i++) { step(sim, 1); if (p.conn === foot) { t = (i + 1) * DT; gx = prev; } prev = p.x; }
+    return { t, p, start: c.xBottom + off, gx };
+  };
+  // ---- 8. straight up from 0 / 30 / 60 / 90 px
+  const rows = [], bad = [];
+  for (const off of [0, 30, 60, 90]) for (const side of off ? [-1, 1] : [1]) {
+    const r = push(off * side, 0, -1);
+    rows.push(`${off * side}px: ${r.t < 0 ? 'no' : r.t.toFixed(2) + 's'}`);
+    if (off <= 60 ? r.t < 0 : r.t >= 0) bad.push(`${off * side} px: ${r.t < 0 ? 'not grabbed' : 'grabbed'}`);
+    delete st.players.climber;
+  }
+  report(foot >= 0 && bad.length === 0, `pushing straight up at the foot of a ladder: grabbed inside 0.5 s from 0-60 px either side, not from 90 px (GRAB_HUMAN ${NL.GRAB_HUMAN}, MAGNET ${NL.MAGNET}): ${rows.join(', ')}` + listed(bad));
+  // ---- 9. a diagonal push
+  {
+    const dg = push(-60, 0.7, -0.8), side = push(-60, 0.95, -0.5);
+    report(dg.t >= 0 && (side.t < 0 || side.gx >= c.xBottom - 39), `a diagonal push (0.7 across, 0.8 up) from 60 px grabs in ${dg.t < 0 ? 'never' : dg.t.toFixed(2) + ' s'}; a mostly sideways one (0.95 across, 0.5 up) is not pulled in: it ${side.t < 0 ? 'walks past' : 'grabs only at ' + Math.round(c.xBottom - side.gx) + ' px (the old 38 px grab)'}`);
+    delete st.players.climber;
+  }
+  // ---- 10. stepping off
+  {
+    const p = person(st, ours, 'stepper', lowerD, c.xBottom);
+    step(sim, 4);
+    nav.board(p, foot, true); // (on the ladder at its foot)
+    p.jx = 1; p.jy = 0;
+    step(sim, 2);
+    const offBottom = p.conn == null && p.d === lowerD;
+    p.jx = 0; step(sim, 2);
+    // climb to the top, then sideways
+    p.jy = -1; for (let i = 0; i < 900 && !(p.conn === foot && p.s <= 0.04); i++) step(sim, 1);
+    p.s = 0; p.jy = 0; step(sim, 1);
+    const atTop = p.conn === foot && p.s <= 0;
+    p.jy = 0; p.jx = -1; step(sim, 3);
+    const offTop = p.conn == null && p.d === mainD;
+    const x0 = p.x;
+    p.jx = -0.8; p.jy = 0.5; step(sim, 12); // (a diagonal push back toward the ladder's top: the step-off lock keeps it from snatching him straight back)
+    const noSnatch = p.conn == null;
+    report(offBottom && atTop && offTop && noSnatch, `a sideways push at the bottom steps off onto the lower deck (${offBottom}); climbed to the top (${atTop}) a sideways push lands him on the main deck (${offTop}, x ${Math.round(x0)}); the ladder does not snatch him straight back (${noSnatch})`);
+    // a half-way push sideways does nothing
+    delete st.players.stepper;
+    const q = person(st, ours, 'mid', lowerD, c.xBottom);
+    step(sim, 4);
+    nav.board(q, foot, true); q.s = 0.5; q.jx = 1; q.jy = 0; step(sim, 3);
+    report(q.conn === foot, 'half-way up a ladder a sideways push does nothing (he holds on)');
+    delete st.players.mid;
+  }
+  // ---- 11. the phone's CLIMB and hint
+  {
+    const p = person(st, ours, 'phone', lowerD, c.xBottom);
+    p.jx = 0; p.jy = 0;
+    step(sim, 6);
+    const a = idOf(p.act);
+    report(a === 'climb' && /^CLIMB UP/.test(p.act.label) && p.ui && p.ui.climb === 'up', `beside a ladder's foot the big button says "${p.act && p.act.label}" and the phone's ui carries climb "${p.ui && p.ui.climb}" (the hint "Push UP to climb")`);
+    p.actQ = true; p.actAid = p.aids.a.cur;
+    step(sim, 2);
+    report(p.conn === foot, 'pressing CLIMB takes hold of the ladder');
+    delete st.players.phone;
+    const c1 = L.connectors.findIndex((q) => q.type === 'ladder' && L.platforms[q.top].id === 'catwalk' && L.platforms[q.bottom].id === 'main');
+    const top = person(st, ours, 'phone2', L.connectors[c1].top, L.connectors[c1].xTop + 30);
+    step(sim, 6);
+    report(top.act && top.act.type === 'climb' && /^CLIMB DOWN/.test(top.act.label) && top.ui && top.ui.climb === 'down', `at the top of the ladder it says "${top.act && top.act.label}" (climb ${top.ui && top.ui.climb})`);
+    delete st.players.phone2;
+    const far = person(st, ours, 'phone3', lowerD, c.xBottom - 200);
+    step(sim, 6);
+    report(!(far.act && far.act.type === 'climb') && !(far.ui && far.ui.climb), 'far from every ladder there is no CLIMB (' + idOf(far.act) + ')');
+    delete st.players.phone3;
+  }
+  // ---- 12. bots and other walkers keep the old 38 px grab
+  {
+    const grabsAt = (off, human) => {
+      const w = { x: c.xBottom + off, y: L.platforms[lowerD].y, d: lowerD, conn: null, vx: 0 };
+      for (let i = 0; i < 30 && w.conn == null; i++) nav.moveWalker(w, 0, -1, DT, 230, 1, human);
+      return w.conn === foot;
+    };
+    report(grabsAt(30, false) && !grabsAt(60, false) && grabsAt(60, true) && !grabsAt(90, true), `a bot or raider (human=false) grabs from 30 px, not 60; a person from 60, not 90 (moveWalker with the flag)`);
+  }
+  // ---- 14. the switch
+  {
+    NL.ENABLED = false;
+    const r60 = push(60, 0, -1), r30 = push(30, 0, -1);
+    delete st.players.climber;
+    const p = person(st, ours, 'old', lowerD, c.xBottom - 20);
+    step(sim, 6);
+    report(r60.t < 0 && r30.t >= 0 && !(p.act && p.act.type === 'climb') && !(p.ui && p.ui.climb), `NAV.LADDER.ENABLED off: 60 px does not grab, 30 px does (the 38 px grab), no CLIMB label (${idOf(p.act)})`);
+    delete st.players.old;
+    NL.ENABLED = true;
+  }
+}
+// ---- 13. the pole still slides (the classic ship has them)
+{
+  const { sim, st, ours } = boot();
+  const L = ours.layout, nav = ours.nav;
+  step(sim, 60);
+  const poleI = L.connectors.findIndex((c) => c.type === 'pole' && L.platforms[c.top].id === 'catwalk' && L.platforms[c.bottom].id === 'main');
+  const pc = L.connectors[poleI];
+  const p = person(st, ours, 'slider', pc.top, pc.xTop - 60);
+  step(sim, 4);
+  p.jx = 0; p.jy = 1;
+  let on = false, landed = -1;
+  for (let i = 0; i < 360 && landed < 0; i++) { step(sim, 1); if (p.conn === poleI) on = true; if (on && p.conn == null) landed = i; }
+  report(poleI >= 0 && on && landed >= 0 && p.d === pc.bottom, `pushing down 60 px from a pole's top: slides to it, rides it and lands on the ${L.platforms[p.d].id} deck (on it ${on})`);
+  delete st.players.slider;
+  const q = person(st, ours, 'climber', pc.bottom, pc.xBottom - 20);
+  step(sim, 4);
+  q.jx = 0; q.jy = -1; step(sim, 40);
+  report(q.conn !== poleI, 'a pole cannot be climbed back up (it is one-way)');
+  const seen = [];
+  for (let off = -60; off <= 60; off += 10) { const cl = person(st, ours, 'dwn', pc.top, pc.xTop + off); step(sim, 6); if (cl.act && cl.act.type === 'climb') seen.push(off); delete st.players.dwn; }
+  report(seen.length > 0, `near a pole's top the big button says SLIDE DOWN (at offsets ${seen.join(', ') || 'none'})`);
+  delete st.players.climber;
+}
 
 report(errors.length === 0, `no errors (${errors.length})` + (errors.length ? '\n    ' + errors.join('\n    ') : ''));
 console.log(ok ? 'grab-check: ALL PASS' : 'grab-check: FAILED');

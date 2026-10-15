@@ -35,6 +35,7 @@ export function createControllerUI({ network }) {
     [(n) => n.locked && SEAT_HINTS[n.kind], (n) => (n.kind === 'helm' && n.hv ? SEAT_HINTS.helmV2 : SEAT_HINTS[n.kind])],
     [(n) => !n.locked && n.load >= 0, () => 'Hold Action to load the shell for the gunner'],
     [(n) => !n.locked && n.taken, () => 'Someone is already here'],
+    [(n) => !n.locked && n.climb, (n) => (n.climb === 'off' ? 'UP / DOWN to climb, push sideways to step off' : n.climb === 'on' ? 'Push UP or DOWN to climb' : n.climb === 'down' ? 'Push DOWN to climb down' : 'Push UP to climb')], // (PLAYTEST1 P4: a ladder is in reach, or you are at its end)
     [(n) => !n.locked && n.label && n.label !== 'Hey!', (n) => (n.hold ? 'HOLD the big button' : 'Tap the big button')],
     [(n) => !n.locked && n.grab, (n) => (n.gswap ? 'Hold GRAB to ' + (n.grab.startsWith('Put back') ? 'put it back' : 'swap') : 'Tap GRAB (or the big button)')],
     [(n) => !n.locked && n.carry === 'ammo', () => 'Bring the ammo to a gun or the bomb bay'],
@@ -62,7 +63,7 @@ export function createControllerUI({ network }) {
 
   // Icon for the Action button, picked from the start of its label.
   const ACTION_ICONS = [
-    ['FIRE FLARE', '🧨'], ['FLARE READY', '⏳'], ['LOWER THE ROPE', '🪜'], ['CLIMB DOWN THE ROPE', '🪜'], ['ROPE LADDER', '🪜'], ['CLIMB', '🧗'], ['WALKING HOME', '🚶'], // (CASTLE.md A0: the away team)
+    ['FIRE FLARE', '🧨'], ['FLARE READY', '⏳'], ['LOWER THE ROPE', '🪜'], ['CLIMB DOWN THE ROPE', '🪜'], ['ROPE LADDER', '🪜'], ['CLIMB', '🧗'], ['SLIDE DOWN', '🛝'], ['WALKING HOME', '🚶'], // (CASTLE.md A0: the away team)
     ['CRANK', '⚙️'], ['PLANT', '💣'], ['SABOTAGE', '🧨'], ['LIGHT THE', '🔥'], ['FREE THE', '🔓'], ['STEAL THE', '🚩'], ['GRAB THE POWDER', '🛢️'], ['POWDER KEG', '🛢️'], // (CASTLE.md A1: the castle objectives)
     ['UNBOLT', '🔧'], ['LIFT THE PART', '⚙️'], ['OPEN THE LOCKER', '🗝️'], ['GRAB THE CHEST', '🧰'], ['GRAB THE GOLD', '💰'], ['HELP CARRY', '🤝'], ['STOW THE CHEST', '🧰'], // (CASTLE.md A2: the outposts' treasure)
     ['BUILD ', '🏗️'], ['STOW THE SCRAP', '🔩'], ['Take scrap out', '🔩'], ['Pick up the scrap', '🔩'], ['Take scrap off', '🔩'], ['DUMP THE SCRAP', '🔩'], ['Swap to hookshot', '🪝'], ['Take hookshot', '🪝'], ['Reel in', '🪝'], ['KICK', '🦶'], ['Auto guns', '🔫'],

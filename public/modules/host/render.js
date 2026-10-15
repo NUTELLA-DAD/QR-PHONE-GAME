@@ -34,6 +34,7 @@ import { createLinkArt } from './linkArt.js'; // linked-station wires, gust warn
 import { createHealthArt } from './healthArt.js'; // heart pips over a hurt crewman's head
 import { createSearchlightArt } from './searchlightArt.js'; // searchlight lamps, beams and the darkness overlay
 import { createPortholeArt } from './portholeArt.js'; // the round brass portholes: friends off screen, the lookout's spyglass (portholes.js)
+import { ladderEnd } from './nav.js'; // (PLAYTEST1 P4: which ladders a person is near, for the gold glow)
 import { idleVerb } from './roleCards.js'; // F10: the verb over a free crewman's head
 import { createFleetArt } from './fleetArt.js'; // B.3: the panels, pennants and edge arrows of a sky with several ships
 import { createVersusArt } from './pvp/versusArt.js'; // B.4: the Versus lobby, HUD, scoreboard (pvp/match.js)
@@ -2805,8 +2806,41 @@ export function createRenderer({ ctx, state: world, canvas }) {
     }
   };
 
+  // PLAYTEST1 P4: the ladders that glow gold - those a person (not a bot) walking this ship is within NAV.LADDER.GLOW_NEAR px of an end of, or is climbing. Stepped on 4 fps keys (no sine of time).
+  const NAVL = config.NAV.LADDER;
+  const glowSet = (lay) => {
+    const out = new Set();
+    if (!NAVL.ENABLED || !NAVL.GLOW) return out;
+    for (const p of Object.values(state.players)) {
+      if (p.bot || p.ko > 0 || p.lock || p.fall || p.air || p.fly || p.hj || p.connected === false || p.d == null || shipOf(world, p).layout !== lay) continue;
+      if (p.conn != null) { out.add(p.conn); continue; }
+      for (const up of [true, false]) { const e = ladderEnd(lay.connectors, p.d, p.x, up, NAVL.GLOW_NEAR); if (e) out.add(e.i); }
+    }
+    return out;
+  };
+  // (a ladder's glow as two ends in the ship's own coordinates: the top of the climb a little above its deck)
+  const glowEnds = (lay, i) => { const c = lay.connectors[i], P = lay.platforms; return [{ x: c.xTop, y: P[c.top].y - 40 }, { x: c.xBottom, y: P[c.bottom].y }]; };
+  const drawLadderGlow = (time) => { // 2D: a gold band along the ladder, gold rungs in ink, brighter on every other quarter second
+    const on = Math.floor(time * 4) & 1;
+    for (const i of glowSet(layout)) {
+      const [a, b] = glowEnds(layout, i), len = Math.hypot(b.x - a.x, b.y - a.y) || 1, nx = -(b.y - a.y) / len, ny = (b.x - a.x) / len;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = on ? 'rgba(255,214,90,0.62)' : 'rgba(255,214,90,0.36)';
+      ctx.lineWidth = 64;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      for (let k = 0, n = Math.max(2, Math.round(len / 26)); k <= n; k++) {
+        const t = k / n, x = a.x + (b.x - a.x) * t, y = a.y + (b.y - a.y) * t;
+        for (const [w, col] of [[8, config.INK], [4.5, on ? '#ffe27a' : '#ffc93c']]) {
+          ctx.lineWidth = w; ctx.strokeStyle = col;
+          ctx.beginPath(); ctx.moveTo(x - nx * 19, y - ny * 19); ctx.lineTo(x + nx * 19, y + ny * 19); ctx.stroke();
+        }
+      }
+    }
+  };
+
   // A pulsing ring in each (human) player's colour around what their Action button will use (dashed: what GRAB will take or swap).
   const drawHighlights = (time) => {
+    drawLadderGlow(time);
     for (const p of Object.values(state.players)) {
       if (p.bot || p.ko > 0) continue;
       for (const act of [p.act, p.grabAct === p.act ? null : p.grabAct]) {
@@ -3546,6 +3580,24 @@ export function createRenderer({ ctx, state: world, canvas }) {
             ctx.fill();
           }
           if (gun.empty > 0) label(gun.emptyText || 'EMPTY!', 0, -32, '22px ' + config.FONTS.DISPLAY, '#a8443f', '#fff', 3);
+        }
+        // PLAYTEST1 P4: the ladders a person is near glow gold (the same band and rungs as the 2D game, through the 3D camera)
+        for (const i of glowSet(sh.layout)) {
+          const [ea, eb] = glowEnds(sh.layout, i), a = shipPt(ea.x, ea.y), b = shipPt(eb.x, eb.y);
+          if (!a || !b) continue;
+          const len = Math.hypot(b.x - a.x, b.y - a.y) || 1, nx = -(b.y - a.y) / len, ny = (b.x - a.x) / len, on = K8 & 1 ? 1 : 0;
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.lineCap = 'round';
+          ctx.strokeStyle = on ? 'rgba(255,214,90,0.64)' : 'rgba(255,214,90,0.38)';
+          ctx.lineWidth = 64 * zw;
+          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+          for (let k = 0, n = Math.max(2, Math.round(Math.hypot(eb.x - ea.x, eb.y - ea.y) / 26)); k <= n; k++) {
+            const t = k / n, x = a.x + (b.x - a.x) * t, y = a.y + (b.y - a.y) * t, h = 19 * zw;
+            for (const [w, col] of [[8, config.INK], [4.5, on ? '#ffe27a' : '#ffc93c']]) {
+              ctx.lineWidth = w * zw; ctx.strokeStyle = col;
+              ctx.beginPath(); ctx.moveTo(x - nx * h, y - ny * h); ctx.lineTo(x + nx * h, y + ny * h); ctx.stroke();
+            }
+          }
         }
         // the Action rings: a ring in each human crewman's colour round what the Action button will use (dashed: what GRAB will take)
         for (const p of Object.values(state.players)) {

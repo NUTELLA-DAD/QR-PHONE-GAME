@@ -13,6 +13,9 @@ const FIND_ME_ON = typeof process === 'undefined' || !!(process.env && process.e
 const HELM_V2_ON = typeof process === 'undefined' || !(process.env && process.env.NO_HELM_V2);
 // PLAYTEST1.md P3: the button says what is in front of you - a station beats a rack unless the rack is clearly nearer, the big button takes a station with a tool in hand, and the Sparrow's racks are thinned out. ON in the game; NO_GRAB_V2=1 in a tool is the old game (the seeded baselines pin it).
 const GRAB_V2_ON = typeof process === 'undefined' || !(process.env && process.env.NO_GRAB_V2);
+// PLAYTEST1.md P4: ladders that catch you - a person pushing up or down near a ladder is pulled onto it, a sideways push at its top or bottom steps off, the big button says CLIMB, the rungs glow. People only (bots keep the 38 px grab). ON in the game; NO_LADDER_V2=1 in a tool is the old game. WITH_LADDER_BOTS=1 lets the bots walk by the people's rules (a test: botsim).
+const LADDER_V2_ON = typeof process === 'undefined' || !(process.env && process.env.NO_LADDER_V2);
+const LADDER_BOTS = typeof process !== 'undefined' && !!(process.env && process.env.WITH_LADDER_BOTS);
 // F12 (FUN.md): small ships crack castles - a ship with no bomb bay (the Sparrow) has her guns' magazines filled every time a castle shutter opens, and her gunners keep their shells for the window (RING.FAIR). ON in the game; NO_RINGFAIR=1 in a tool is the old game (the seeded baselines pin it).
 const RINGFAIR_ON = typeof process === 'undefined' || !(process.env && process.env.NO_RINGFAIR);
 // F13 (FUN.md): steam and lift - the plumbing is not wrecked by every scrape of rock, a burst pipe shuts its own valve, the pump gets the steam first while she sinks, a warning ladder (LOW ON COAL, LOW STEAM, SINKING) comes before FALLING, and the grazing rule is less trigger-happy (STEAMFIX). ON in the game; NO_STEAMFIX=1 in a tool is the old game (the seeded baselines pin it).
@@ -3867,6 +3870,10 @@ export const config = {
     JUMP_DODGE: 28, // height (px) above the deck at which a jumper dodges a raider's swing
     JUMP_COOLDOWN: 0.15, // seconds after landing before the next hop
   },
+  // PLAYTEST1.md P4 (people only; bots keep nav.js's 38 px grab): GRAB_HUMAN = px from a ladder's end within which a push mostly up or down (|stick y| over 0.4 and at least as big as the sideways push) slides him to it and he grabs it;
+  // MAGNET = px/s of that slide; SIDE_OFF = sideways push (0-1) that steps him off at the top or bottom of a ladder; STEP_OFF_LOCK = seconds after stepping off before a ladder can catch him again;
+  // HINT = the phone says "Push UP to climb" and the big button says CLIMB near a ladder; GLOW = the rungs glow gold (stepped) while a person is within GLOW_NEAR px of an end, or on it. BOTS = bots use the people's rules (a test).
+  NAV: { LADDER: { ENABLED: LADDER_V2_ON, GRAB_HUMAN: 70, MAGNET: 420, SIDE_OFF: 0.5, STEP_OFF_LOCK: 0.3, HINT: true, GLOW: true, GLOW_NEAR: 220, BOTS: LADDER_BOTS } },
   // Airborne play (jumping off the ship, falling onto lower decks, being thrown about).
   AIR: {
     GRAVITY: 1900, // px/s² while falling free (same as the hop, so a jump off an edge feels continuous)

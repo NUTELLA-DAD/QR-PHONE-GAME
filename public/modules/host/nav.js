@@ -15,6 +15,18 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const GRAB_COST = 0.25; // seconds to get onto a ladder
 const isPole = (c) => c.type === 'pole';
 
+// PLAYTEST1.md P4 (ladders that catch you): the connector end a walker on deck d at x could take going up (the bottom end of a ladder or stairs; poles are one-way) or down (the top end of anything),
+// nearest first within `reach` px: { i (the connector), ex (the end's x), dx (the walk to it) } or null. Used by the walkers, the phone's CLIMB offer and the gold glow on the TV.
+export function ladderEnd(conns, d, x, up, reach) {
+  let best = null;
+  conns.forEach((c, i) => {
+    if (up ? c.bottom !== d || isPole(c) : c.top !== d) return;
+    const ex = up ? c.xBottom : c.xTop, dx = ex - x;
+    if (Math.abs(dx) < reach && (!best || Math.abs(dx) < Math.abs(best.dx))) best = { i, ex, dx };
+  });
+  return best;
+}
+
 export function createNav(layout) {
   const P = layout.platforms;
   const C = layout.connectors;
@@ -156,8 +168,18 @@ export function createNav(layout) {
     return true;
   }
 
-  // Apply joystick input (jx, jy in -1..1) to a walker for one frame.
-  function moveWalker(w, jx, jy, dt, walkSpeed, climbScale = 1) {
+  // Get a walker onto connector i at its bottom end (up) or its top end (the CLIMB button, the magnet below).
+  function board(w, i, up) {
+    w.conn = i;
+    w.s = up ? 1 : 0;
+    w.climb = true;
+    w.vx = 0;
+  }
+
+  // Apply joystick input (jx, jy in -1..1) to a walker for one frame. `human` (a person's phone, not a bot or a raider; with config.NAV.LADDER.ENABLED) = the ladders catch him: a push mostly up or down
+  // within GRAB_HUMAN px of a ladder end slides him to it at MAGNET px/s and he grabs it, and a sideways push at either end of a ladder steps him off onto that deck.
+  function moveWalker(w, jx, jy, dt, walkSpeed, climbScale = 1, human = false) {
+    const LAD = human && config.NAV.LADDER.ENABLED ? config.NAV.LADDER : null;
     if (w.conn != null) {
       const c = C[w.conn];
       const h = P[c.bottom].y - P[c.top].y;
@@ -167,6 +189,15 @@ export function createNav(layout) {
       const pt = connPoint(c, w.s);
       w.x = pt.x;
       w.y = pt.y;
+      if (LAD && !isPole(c) && (w.s <= 0 || w.s >= 1) && Math.abs(jx) > LAD.SIDE_OFF && Math.abs(jx) > Math.abs(jy)) { // (P4: at the top or the bottom a sideways push steps off onto that deck)
+        w.d = w.s <= 0 ? c.top : c.bottom;
+        w.conn = null;
+        w.climb = false;
+        w.vx = 0;
+        w.ladderOff = LAD.STEP_OFF_LOCK; // (a moment before a ladder can catch him again)
+        w.face = jx < 0 ? -1 : 1;
+        return;
+      }
       if (w.s <= 0 && jy < -0.4) {
         w.conn = null;
         w.d = c.top;
@@ -179,15 +210,26 @@ export function createNav(layout) {
       return;
     }
     const p = P[w.d];
-    if (Math.abs(jy) > 0.4) {
+    if (LAD && w.ladderOff > 0) w.ladderOff -= dt;
+    if (Math.abs(jy) > 0.4 && !(LAD && w.ladderOff > 0)) {
       const up = jy < 0;
       const i = C.findIndex((c) => (up ? c.bottom === w.d && !isPole(c) && Math.abs(w.x - c.xBottom) < GRAB : c.top === w.d && Math.abs(w.x - c.xTop) < GRAB));
       if (i >= 0) {
-        w.conn = i;
-        w.s = up ? 1 : 0;
-        w.climb = true;
-        w.vx = 0;
+        board(w, i, up);
         return;
+      }
+      if (LAD && Math.abs(jy) >= Math.abs(jx)) { // P4: pushing up or down near a ladder (not much sideways): he slides to it and takes hold
+        const e = ladderEnd(C, w.d, w.x, up, LAD.GRAB_HUMAN);
+        if (e && !crossesGap(gaps, w.d, w.x, e.ex)) {
+          const mv = Math.min(Math.abs(e.dx), LAD.MAGNET * dt) * Math.sign(e.dx);
+          w.x += mv;
+          w.y = p.y;
+          w.vx = 0;
+          w.climb = false;
+          if (mv) w.face = mv < 0 ? -1 : 1;
+          if (Math.abs(e.dx) <= LAD.MAGNET * dt) board(w, e.i, up);
+          return;
+        }
       }
     }
     w.climb = false;
@@ -246,9 +288,9 @@ export function createNav(layout) {
   // Is a point within reach on the same platform?
   const samePlatform = (a, b) => a.conn == null && b.conn == null && !a.fall && !b.fall && a.d === b.d;
 
-  return { layout, connScale, rebuildNav, plan, travelTime, connPoint, platformBelow, detach, fall, moveWalker, direction, steerTo, samePlatform, setGaps, gaps, holes };
+  return { layout, connScale, rebuildNav, plan, travelTime, connPoint, platformBelow, detach, fall, moveWalker, board, direction, steerTo, samePlatform, setGaps, gaps, holes };
 }
 
 // Ship 0's navigation (ships.js attaches it as ship0.nav) and the module-level forwards the walkers still use.
 export const mainNav = createNav(SHIP_LAYOUT); // lint-ok (a nav refreshes itself on layout.onChange)
-export const { connScale, rebuildNav, plan, travelTime, connPoint, platformBelow, detach, fall, moveWalker, direction, steerTo, samePlatform } = mainNav;
+export const { connScale, rebuildNav, plan, travelTime, connPoint, platformBelow, detach, fall, moveWalker, board, direction, steerTo, samePlatform } = mainNav;

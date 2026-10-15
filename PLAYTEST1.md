@@ -248,6 +248,7 @@ Use `BUILDS` with `buildLayout`, plus `placeFrame` / `finishFrame` / `growPart`,
   - Green: scrap, frames-build, derelicts and stop-shape.
 
 ### P4. Ladders that catch you (S) - after P3 (both touch `shipSim.js` near 296 and 1556 and share `grab-check.mjs`)
+- **STATUS (2026-10-15): BUILT** (branch worktree-agent-a31ba4dfc4427c665, not merged). `config.NAV.LADDER` (`ENABLED` false or `NO_LADDER_V2=1` = today's game; `WITH_LADDER_BOTS=1` makes bots walk by the people's rules, for botsim). `nav.js`: `ladderEnd()` and `board()`; `moveWalker(..., human)` slides a person pushing mostly up/down within 70 px at 420 px/s and grabs, and a sideways push at a ladder's end steps off (a 0.3 s lock stops it snatching him back); bots and raiders keep the 38 px grab. `shipSim.js`: a `climb` act (CLIMB UP / CLIMB DOWN / SLIDE DOWN) on the big button when nothing else wants it (racks, seats, valves still win), ui `climb` for the phone line ("Push UP to climb"; "Push UP or DOWN to climb" on it; "push sideways to step off" at its ends). `render.js`: gold band and rungs, stepped, in 2D and the 3D HUD, on ladders a person is within 220 px of or on. Deviation: on the Sparrow the lower ladder's foot shares ground with an extinguisher (CLIMB shows within about 25 px of the foot; the push still catches from 70 px). `--check-grab` sections 8-14, `tools/ladder-shots.mjs` (`ladder_*.png`). Castle ladders (ground.js) untouched.
 - **Files:**
   - `nav.js:13, 160-192 moveWalker` (humans only);
   - `shipSim.js:296` (a CLIMB offer) and `1551`;
