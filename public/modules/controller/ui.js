@@ -1,6 +1,7 @@
 import { createRadar } from './radar.js';
 import { config } from '../../config.js';
 import { helpFor } from './help.js';
+const PHONE_BUZZ = !!(config.CONTROLS && config.CONTROLS.PHONE_BUZZ); // (the owner's playtest: phones never buzz unless this is switched on)
 
 export function createControllerUI({ network }) {
   const $ = (id) => document.getElementById(id);
@@ -199,7 +200,7 @@ export function createControllerUI({ network }) {
   // Phone buzz (where the browser allows it): the host's `buzz` pattern; a short pulse for a pickup, two for letting go.
   const vibrate = (pattern) => {
     try {
-      if (pattern && navigator.vibrate) navigator.vibrate(pattern);
+      if (PHONE_BUZZ && pattern && navigator.vibrate) navigator.vibrate(pattern); // (owner's playtest: no buzzing at all - PHONE_BUZZ is false)
     } catch {
       // ignore
     }

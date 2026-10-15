@@ -3913,7 +3913,7 @@ export const config = {
     REVIVE_TIME: 1.2,
   },
   // Phone controls (Phase C): the big ACTION button uses what you hold; the small GRAB button takes, swaps and hops on stations.
-  CONTROLS: {
+  CONTROLS: { PHONE_BUZZ: false, // the owner's playtest (2026-10-15): no phone buzzing at all
     GRAB_LOCK: 0.6, // seconds after any pickup / put-back / swap / station take when the host ignores more grab presses from that player (job actions are exempt)
     GRAB_HOLD: 0.35, // seconds GRAB must be held to swap, put back or replace what is in your hands (taking with empty hands is instant)
     HYSTERESIS: 15, // px: the rack / station you were already near keeps the button until another is this much closer (no flickering labels)
