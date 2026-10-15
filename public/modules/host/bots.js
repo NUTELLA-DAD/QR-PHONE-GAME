@@ -18,7 +18,7 @@ import { cannonPlan } from './cannon.js';
 import { hullOrStructure } from './structure.js';
 import { solveThrow } from './cargo.js';
 import { scrapOn, holdSpot, holdFull, holdCount, heavyHold, helmPlan } from './scrap.js';
-import { framesOn, pendingOf, frameSpot, calmFor } from './buildFrames.js';
+import { framesOn, pendingOf, frameSpot, framesCalm } from './buildFrames.js';
 import { cannonSeatName, sizeNamed } from './shipBuild.js';
 import { toWorldX, toWorldY, toShipX, toShipY, aimToShip } from './pose.js';
 import { captainFly, captainOf, callout, bombFalls, dropPossible } from './pvp/captainAI.js';
@@ -540,7 +540,7 @@ function scrapJobs(state, bot, patching = false) {
   if (!scrapOn() || state.phase !== 'flying' || state.ship.down || bot.mate || bot.team === 'enemy') return [];
   const ship = mainShip(state), L = ship.layout, sp = holdSpot(L);
   if (!sp || ship.ai) return [];
-  const out = [], full = holdFull(state), frame = frameJob(state);
+  const out = [], full = holdFull(state), frame = frameJob(state, bot);
   if (bot.carry === 'scrap') {
     if (patching) return out; // (G2: a failing segment wants this bundle: the patch job is ahead of the bin)
     if (frame) { out.push(frame); return out; } // (G4: a calm, and a part bought as a frame is waiting for its bundles: carry this one to it)
@@ -558,13 +558,21 @@ function scrapJobs(state, bot, patching = false) {
 }
 // FRAMES (config.FRAMES, LOOP.md G4): bots build only in a CALM - the tempo's calm or escape, no set piece, no fall, no raiders aboard, no fire burning, no gunship hunting, no live creature - so the gunners and the stokers are never short of hands in a crisis.
 function frameCalm(state) {
-  return calmFor(state, config.FRAMES.BOTS.ALLOW);
+  return framesCalm(state, config.FRAMES.BOTS.ALLOW); // (P5: buildFrames.js framesCalm: a raft with no gun builds in any phase)
 }
 // The build job a bot may take now (one frame at a time), or null.
-function frameJob(state) {
+function frameJob(state, bot = null) {
   if (!framesOn() || !frameCalm(state)) return null;
-  const f = pendingOf(state).find((q) => q.ok !== false);
-  return f ? { kind: 'buildframe', obj: f, max: 2, cap: config.FRAMES.BOTS.CAP } : null;
+  const open = pendingOf(state).filter((q) => q.ok !== false);
+  if (!open.length) return null;
+  const R = config.RAFT, raft = R.ENABLED && state.run && state.run.raft;
+  let f = open[0];
+  if (raft) { // (P5: the raft has two frames at once and a whole crew with nothing else to do: up to MAX_ON_FRAME bots on one, the rest on the next)
+    const on = (q) => Object.values(state.players).filter((b) => b !== bot && b.bot && b.botJob && b.botJob.kind === 'buildframe' && b.botJob.obj === q).length; // (the others on it: a bot counting itself flipped between the two frames every step)
+    const mine = bot && bot.botJob && bot.botJob.kind === 'buildframe' && open.includes(bot.botJob.obj) ? bot.botJob.obj : null; // (...and a bot already on a frame stays on it)
+    f = mine || open.find((q) => on(q) < R.BOTS.MAX_ON_FRAME) || open[0];
+  }
+  return { kind: 'buildframe', obj: f, max: raft ? R.BOTS.MAX_ON_FRAME : 2, cap: raft ? R.BOTS.CAP : config.FRAMES.BOTS.CAP };
 }
 // Where a bot stands to strip a hulk: the open deck whose point nearest the hulk is within hand's reach of it ({ d, x }), or null.
 function hulkSpot(ship, h) {

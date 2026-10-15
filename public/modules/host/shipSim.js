@@ -292,7 +292,9 @@ export function createShipSim(world, ship, W) {
       const valve = modules.list.find((m) => m.kind === 'pipe' && here(m, reach));
       return valve ? { type: 'valve', obj: valve, label: valve.open ? 'Close valve' : 'Open valve' } : null;
     };
-    const vvLate = GV2.ENABLED && !player.bot;
+    const raftBot = player.bot && ship.main && world.run && world.run.raft && config.RAFT.ENABLED; // (P5: on the raft the coal, the ammo and the helm stand 65-75 px apart with a pipe valve between them: a bot's valve and vent come after the stations too, as a person's do, or its Action at the coal bunker turns the valve)
+    const vvLate = GV2.ENABLED && (!player.bot || raftBot);
+    if (raftBot && player.botJob && player.botJob.kind === 'valve' && player.botJob.obj && here(player.botJob.obj, T.REACH)) { const m = player.botJob.obj; return { type: 'valve', obj: m, label: m.open ? 'Close valve' : 'Open valve' }; } // (...and a bot sent to a valve gets the valve)
     if (!vvLate) { const vv = ventValve(T.REACH); if (vv) return vv; }
     if (station) {
       const gun = state.GUNS[station.n];
@@ -1060,6 +1062,7 @@ export function createShipSim(world, ship, W) {
     protect: () => goingDown.protect(),
     difficulty: () => world.difficulty,
     stopNo: () => (state.course && state.course.stop ? state.course.stop.col + 1 + ((world.run && world.run.base) || 0) : 99), // (the number of the stop she is flying; a headless run with no route can split at once)
+    raftHold: () => !!(ship.main && world.run && world.run.raft && config.RAFT.ENABLED && config.RAFT.NO_BREAK_BEFORE && state.course && state.course.stop && state.course.stop.col + 1 + (world.run.base || 0) < config.RAFT.NO_BREAK_BEFORE && layout.platforms.filter((q) => config.STRUCTURE.GONDOLA.includes(rowOf(q))).length <= 1), // (P5: no end of the one-deck raft breaks off in the first stop of a voyage)
     say: (text, secs) => { if (ship.main) { state.say('structure', text, null, secs); } },
     buzz: (pattern) => { for (const p of Object.values(state.players)) phoneFx(p, null, pattern); },
     pop: (x, y, kind, color, size) => shipPop(x, y, kind, color, size),

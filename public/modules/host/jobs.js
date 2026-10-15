@@ -13,7 +13,7 @@ import { bunkerEmpty } from './goingDown.js';
 import { gripJobs } from './creatureGrip.js';
 import { scrapOn, holdSpot, holdFull, holdCount } from './scrap.js';
 import { isMothballed } from './gunsMatter.js';
-import { framesOn, pendingOf, frameSpot, frameWords, calmFor } from './buildFrames.js';
+import { framesOn, pendingOf, frameSpot, frameWords, framesCalm } from './buildFrames.js';
 import { verbOf } from './roleCards.js'; // (F10: the verb of a job, for the head tag on the TV and the ? card)
 
 const J = config.JOBS;
@@ -87,7 +87,7 @@ export function createJobFinder(state) {
     // HELP! calls (spotter.js): the crew sent to a caller get an arrow to them, in the caller's colour.
     for (const c of state.helpCalls || []) if (c.caller !== p && c.who.includes(p.id) && c.caller.d != null) { const s = spot(c.caller); add('help', c.caller, s.d, s.x, {}, `HELP ${c.caller.name}! - ${roomName(s.d, s.x)}`); }
     for (const ld of state.loads || []) if (ld.kind !== 'scrap') add('shovel', ld, ld.d, ld.x, {}, `SHOVEL THE ${((config.CROSS.CARGO.ITEMS[ld.kind] || {}).label || 'LOAD').toUpperCase()} OVERBOARD - ${roomName(ld.d, ld.x)}`); // (B.6: cargo thrown onto her deck tips her)
-    const framesNow = me.main && framesOn() && calmFor(state, config.FRAMES.ARROWS) ? pendingOf(state).filter((f) => f.ok !== false) : []; // (G4: parts waiting for their bundles - and the sky quiet enough to send anybody)
+    const framesNow = me.main && framesOn() && framesCalm(state, config.FRAMES.ARROWS) ? pendingOf(state).filter((f) => f.ok !== false) : []; // (G4: parts waiting for their bundles - and the sky quiet enough to send anybody)
     { // SCRAP: a bundle on the deck is picked up (hands empty), one in your hands goes to the hold (the hold bin is in the Hold room: holdSpot)
       const sp = scrapOn() && !me.ai ? holdSpot(L) : null;
       if (sp && !holdFull(state)) {

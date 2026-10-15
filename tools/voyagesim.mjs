@@ -1,6 +1,6 @@
 // Full-voyage bot simulation. Plays whole voyages (8 stops) with bot crew and reports how far each got and why it died.
 //  --mode quick|voyage|campaign: the session-length mode (config.VOYAGE.MODES); --daily flies today's daily voyage. The table shows median minutes and victory rate.
-//  --build sparrow|classic|none: start the voyage with that ship and the Shipwright's Yard (part cards at the sky-docks, the bots vote for them): the table adds the parts bought by the Flagship. Default: sparrow (the ship the browser starts with). `none` = no start build (the classic ship, the old shop: what the golden baseline flies).
+//  --build sparrow|classic|raft|none (P5: raft = the tiny one-deck start with two gift frames, scrap on): start the voyage with that ship and the Shipwright's Yard (part cards at the sky-docks, the bots vote for them): the table adds the parts bought by the Flagship. Default: sparrow (the ship the browser starts with). `none` = no start build (the classic ship, the old shop: what the golden baseline flies).
 //  --profile bot|human (FUN.md F8): how the bots play (config.BOTS.PROFILES). `human` thinks slowly, aims loosely, answers alarms late and steers with a shaky hand, so its win rate is a better compass for people. Default: bot.
 // Usage: node tools/voyagesim.mjs [--runs 10] [--difficulty normal] [--mode voyage] [--bots 8] [--humans 0] [--topup] [--maxmin 45] [--stall 8] [--seed 1] [--verbose]
 //  natural mode (default): the run ends on a wreck or victory; the cause of the wreck is reported.
@@ -167,6 +167,7 @@ const load = (p) => import(pathToFileURL(path.join(root, p)).href);
 const { config } = await load('config.js');
 if (process.env.NO_BREAKOFF) config.BREAKOFF.ENABLED = false; // (compare voyages with parts never breaking off: S.5i)
 if (!process.env.WITH_SPYGLASS) config.SPYGLASS.BOTS = false; // (bot lookouts pan and spot the spyglass in the game; the voyage baselines keep their numbers)
+if (args.build === 'raft' && !process.env.NO_SCRAP) config.SCRAP.ENABLED = true; // (P5: the raft is built from carried scrap - its gift is frames - so scrap is on for her, as in the game)
 if (process.env.NO_CURRICULUM) config.VOYAGE.CURRICULUM.ENABLED = false; // (compare voyages with the old random skies and kinds instead of the teaching curriculum: G0)
 if (process.env.NO_LAIRS) config.CREATURES.LAIR.COUNT = { short: 0, long: 0 }; // (compare voyages with no Kraken lair on the route: C.3)
 if (process.env.NO_MOTHER) delete config.CREATURES.LAIR.BY_ENV.fungal; // (C.6e: compare voyages with no Mycelial Mother lair on the Fungal Depths stops)

@@ -32,9 +32,9 @@ export function powerRatio(L) {
 
 // ratio -> the share of full danger a ship of that power meets: 1 at the classic ship's power, down to POWER_FLOOR for a bare hull; key = which scaler (YARD.POWER.KEYS says how
 // strongly each one follows: 1 = all of it, 0 = not at all).
-export function powerMul(ratio, key) {
+export function powerMul(ratio, key, scale = null) { // (scale: P5, a raft voyage follows her power harder: config.RAFT.POWER_SCALE instead of YARD.POWER_SCALE)
   const Y = config.YARD;
-  const m = Math.max(Y.POWER_FLOOR, 1 - Y.POWER_SCALE * (1 - ratio));
+  const m = Math.max(Y.POWER_FLOOR, 1 - (scale ?? Y.POWER_SCALE) * (1 - ratio));
   const w = Y.POWER.KEYS[key];
   return w ? 1 - w * (1 - m) : 1;
 }

@@ -357,7 +357,7 @@ export function createStructure({ state, ship, hooks }) {
       pending = { spec: { comps: f, gone, small: small.flatMap((c) => c.stretches), at: gone.length ? (gone[0].a + gone[0].b) / 2 : 0, ids: list.map((g) => g.sig) } };
       return true;
     }
-    if (K.KEY_NO_BREAK_BEFORE && hooks.stopNo() < K.KEY_NO_BREAK_BEFORE && [...list, ...small.flatMap((c) => c.segs.map((i) => S.segs[i]))].some(carriesKey)) { for (const g of list) { g.hp = K.HELD_HP; g.hold = null; } hooks.say('IT HOLDS - FOR NOW...', 3); return false; } // (F5: an end with the boiler or the helm cannot break off in the first stops)
+    if ((K.KEY_NO_BREAK_BEFORE && hooks.stopNo() < K.KEY_NO_BREAK_BEFORE && [...list, ...small.flatMap((c) => c.segs.map((i) => S.segs[i]))].some(carriesKey)) || (hooks.raftHold && hooks.raftHold())) { for (const g of list) { g.hp = K.HELD_HP; g.hold = null; } hooks.say('IT HOLDS - FOR NOW...', 3); return false; } // (F5: an end with the boiler or the helm cannot break off in the first stops)
     const cuts = [...gone, ...small.flatMap((c) => c.stretches)];
     const r = hooks.breakCuts(cuts, 'structure');
     stats.breakoffs += r ? 1 : 0;

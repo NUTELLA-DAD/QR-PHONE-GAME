@@ -130,8 +130,8 @@ function castOff(b) {
   report(fr.frame && fr.need >= F.MIN && fr.need <= F.MAX && fr.need === BF.bundlesFor(fr.base) && !fr.scrap && fr.entry === plain.entry && fr.choices === plain.choices, `it asks ${fr.need} bundles to be carried in flight and none at the dock; the same places as the part card (${fr.choices.length})`);
   report(fr.cost === Math.round((fr.base * F.CASH_SHARE) / 5) * 5 && fr.cost < plain.cost + 1 && /carry \d+ scrap/.test(SC.priceWords(fr)), `it costs ${fr.cost} salvage (${F.CASH_SHARE} of ${fr.base}; the plain card costs ${plain.cost} + ${plain.scrap} scrap): "${SC.priceWords(fr)}"`);
   { const empty = dock('gun', { hold: 0 }), f2 = frameOf(empty.st), p2 = plainOf(empty.st); report(f2.cost < p2.cost, `with an empty hold the plain card is all cash (${p2.cost}) and the frame is cheaper (${f2.cost}): labour instead of money`); }
-  const big = dock('gasbag'), eng = dock('engine');
-  report(!frameOf(big.st) && !frameOf(eng.st), 'a gasbag and an engine pod (the big parts) have no frame card: they stay at the Yard');
+  const big = dock('gasbag');
+  report(!frameOf(big.st), 'a gasbag (a big part) has no frame card: it stays at the Yard (the engine pod is a frame since P5, section 1b)');
   for (const id of ['lamp', 'armour', 'ballast', 'sail', 'ladder']) { const d = dock(id); if (!plainOf(d.st)) { console.log('NOTE ' + id + ': no place on the Sparrow'); continue; } report(!!frameOf(d.st), `a ${id} can be bought as a frame`); }
   { const d = dock('gun', { s: seed + 3 }); buyFrame(d); d.st.vote = null; d.st.yardOnly = 'lamp'; d.st.run.salvage = 600; d.sim.startDock(); report(!!plainOf(d.st) && !frameOf(d.st), 'with one frame already waiting there is a plain part card and no second frame card'); }
   { const d = dock('gun'); d.st.run.salvage = 5; report(frameOf(d.st) && d.st.vote.options.every((o) => o.kind === 'cast' || o.cost > 5 || true), 'the card is priced even when the crew is poor'); }
@@ -140,6 +140,46 @@ function castOff(b) {
   // off switches
   { const d = dock('gun'); config.FRAMES.ENABLED = false; d.st.vote = null; d.sim.startDock(); report(!frameOf(d.st) && !!plainOf(d.st), 'FRAMES.ENABLED = false: the plain part card only'); config.FRAMES.ENABLED = true; }
   { const d = dock('gun'); config.SCRAP.ENABLED = false; d.st.vote = null; d.sim.startDock(); report(!frameOf(d.st), 'with scrap off there is no frame card'); config.SCRAP.ENABLED = true; }
+}
+
+// ---------------------------------------------------------------- 1b. the engine frame (PLAYTEST1.md P5: the raft's gift is an engine pod and a gun as frames; FRAMES.PARTS has 'engine' while RAFT.ENABLED)
+{
+  const raise = (b, f) => { // (a bundle in the hands at the work spot, Action held, until the last one is in)
+    const { sim, st, ours } = b, sp = BF.frameSpot(ours, f), p = person(st, ours, 'raiser' + f.id, sp.d, sp.x, 'scrap', 'Raiser');
+    for (let g = 0; g < 12 && !f.done; g++) { p.carry = 'scrap'; p.fire = true; p.x = sp.x; p.d = sp.d; step(sim, secs(F.TIME + 0.4), () => (f.done ? 'stop' : null)); p.fire = false; }
+    step(sim, 5);
+    delete st.players['raiser' + f.id];
+  };
+  const b = boot({ startBuild: 'raft', bots: 3 });
+  const { sim, st, ours } = b;
+  step(sim, secs(2));
+  const eng = st.run.frames.find((f) => f.entry === 'engine'), gun = st.run.frames.find((f) => f.entry === 'gun');
+  report(!!eng && !!gun && eng.need >= F.MIN && ours.layout.engines.length === 0, `the raft is gifted an engine frame (${eng && eng.where}, ${eng && eng.need} bundles) and a gun frame`);
+  const v0 = ours.layout.version;
+  raise(b, eng);
+  const pod = ours.layout.engines[0];
+  report(eng.done && !!pod && ours.layout.version > v0 && ours.layout.pipes.some((q) => q.to === pod.name), `the last bundle of the engine frame: the pod is alive (${pod && pod.name}) and the boiler's steam pipe is routed to it`);
+  report(st.run.parts.some((q) => q.id === 'engine' && q.frame && q.by.length >= 1) && st.run.build === ours.layout.parts, 'run.parts remembers who built it; run.build grew');
+  report(momentsOf(st, 'frame-built').length === 1 && !!st.yard.newPart && /ENGINE/.test(st.yard.newPart.name), `the Book has the moment and the TV calls "NEW: ${st.yard.newPart && st.yard.newPart.name}"`);
+  step(sim, secs(10));
+  report(errors.length === 0 && st.ship.down <= 0, 'she flies on with it, no errors');
+  // the gun frame is raised after the engine on the changed ship; then the dock sells a SECOND engine pod as a frame, which is raised too
+  raise(b, gun);
+  report(gun.done && gunsOf(ours) === 1, 'the gun frame, raised second, comes alive too');
+  st.run.salvage = 900; st.scrapHold = { count: 4 }; st.yardOnly = 'engine'; config.SHOP.V2_PART_CHANCE = 1; st.vote = null; sim.startDock();
+  const cards = st.vote ? st.vote.options : [];
+  const frameC = cards.find((o) => o.frame), plainC = cards.find((o) => o.kind === 'part' && !o.frame);
+  if (!frameC) console.log('   (the dock shows: ' + cards.map((o) => o.name + (o.frame ? '[frame]' : '')).join(' | ') + ') ' + JSON.stringify({ kind: plainC && plainC.kind, base: plainC && plainC.base, cost: plainC && plainC.cost, derelict: plainC && plainC.derelict, trophy: plainC && plainC.trophy, entry: plainC && plainC.entry, pending: BF.pendingOf(st).length, framable: BF.framable('engine'), frames: st.run.frames.map((f) => f.entry + ':' + f.done) }));
+  report(!!frameC && !!plainC && frameC.entry === 'engine' && frameC.need === BF.bundlesFor(frameC.base), `at the dock a second engine pod has a frame card (${frameC && frameC.need} bundles, ${frameC && frameC.cost} salvage) beside the plain one`);
+  if (frameC) {
+    buyFrame({ sim, st, ours });
+    castOff({ sim, st });
+    const f2 = st.run.frames.find((f) => f.entry === 'engine' && !f.done);
+    report(!!f2 && f2.ok, `bought: the second pod stands as a frame (${f2 && f2.where})`);
+    if (f2) { raise(b, f2); report(f2.done && ours.layout.engines.length === 2 && ours.layout.pipes.filter((q) => /Engine/.test(q.to)).length === 2, `...and raised: two engine pods, two pipes (${ours.layout.engines.map((q) => q.name).join(', ')})`); }
+  }
+  step(sim, secs(10));
+  report(errors.length === 0 && st.ship.down <= 0, 'the ship with her built engines flies on, no errors');
 }
 
 // ---------------------------------------------------------------- 2. buying it

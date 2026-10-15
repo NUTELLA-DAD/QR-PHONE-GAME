@@ -94,7 +94,8 @@ export function createFire({ state, shipPuff }) {
     }
     for (const fire of state.fires) {
       const here = clamp(flamAt(SL, fire.d, fire.x), F.SPREAD_MIN_MUL, F.SPREAD_MAX_MUL) * (fire.big ? B.SPREAD_MUL : 1);
-      if ((fire.t += dt) > (F.PARTY && column() <= F.EARLY_COLS ? F.SPREAD_EARLY : F.SPREAD_EVERY) / crewMul(state, 'spread') / here && state.fires.length < cap() + (state.blaze ? B.EXTRA_CAP : 0)) {
+      const slow = state.run && state.run.raft && config.RAFT.ENABLED && P.length <= 1 ? config.RAFT.FIRE_SPREAD_MUL : 1; // (P5: a one-deck raft is 480 px of deck with the coal in the middle: a fire has nowhere to go but everywhere, and the crew have one extinguisher; it spreads this much slower)
+      if ((fire.t += dt) > (F.PARTY && column() <= F.EARLY_COLS ? F.SPREAD_EARLY : F.SPREAD_EVERY) / crewMul(state, 'spread') / here * slow && state.fires.length < cap() + (state.blaze ? B.EXTRA_CAP : 0)) {
         fire.t = 0;
         const spots = spreadSpots(SL, fire);
         const total = spots.reduce((n, s) => n + s.w, 0);

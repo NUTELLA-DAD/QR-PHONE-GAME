@@ -96,13 +96,14 @@ function engineCands(type, size, dir) {
 // The ship's two ends along the hull: the decks a hull bay lengthens, and what the new bay gets.
 function bayCandidates(parts, L) {
   const rows = ['main', 'lower', 'catwalk'].map((r) => L.platforms.find((q) => rowOf(q) === r)).filter(Boolean);
-  if (rows.length < 2) return [];
+  const least = config.RAFT.ENABLED && rows.length === 1 ? 1 : 2; // (P5: the one-deck raft is lengthened too: a bay is one room longer on its only deck)
+  if (rows.length < least) return [];
   const lo = Math.min(...rows.map((q) => q.x0)), hi = Math.max(...rows.map((q) => q.x1));
   const out = [];
   for (const side of ['aft', 'fore']) {
     const edge = side === 'aft' ? lo : hi;
     const decks = rows.filter((q) => Math.abs((side === 'aft' ? q.x0 : q.x1) - edge) <= COL * 1.5);
-    if (decks.length < 2) continue;
+    if (decks.length < least) continue;
     const apply = (ps) => {
       let next = ps;
       for (const q of decks) {
@@ -165,6 +166,28 @@ function bagCandidates(parts, L) {
     }
   }
   return out;
+}
+
+// P5: a second deck for the raft (PLAYTEST1.md 3g). `row` = 'lower' (a covered deck under the main deck, with a ladder down to it: drawDeck makes the ladder) or 'catwalk' (an open top deck over it). The places: the whole length of the main
+// deck, or its aft or fore three columns. null when the ship has no main deck to hang it from; a ship that already has that row is not offered it (allowed). Pipes and the frame are routed again.
+function deckCandidates(row) {
+  return (parts, L) => {
+    const main = L.platforms.find((q) => rowOf(q) === 'main');
+    if (!main || !config.RAFT.ENABLED) return [];
+    const spans = [[main.x0, main.x1, 'the whole length']];
+    if (main.x1 - main.x0 >= 4 * COL) spans.push([main.x0, main.x1 - COL, 'aft three rooms'], [main.x0 + COL, main.x1, 'fore three rooms']);
+    const name = row === 'lower' ? 'Lower deck' : 'Top deck', y = DECK_ROWS[row];
+    return spans.map(([x0, x1, what]) => ({
+      x: (x0 + x1) / 2, y, where: `${name}, ${what}`, ghost: { x0, x1, y0: y - 70, y1: y + 24 },
+      apply: (ps) => {
+        const r = drawDeck(ps, row, x0, x1);
+        if (!r.ok) return clone(ps);
+        let next = r.parts;
+        for (let k = 0; k < 2 && validate(next).warns.some((w) => /gasbag covers/.test(w)); k++) { const g = setBag(next, { grow: 1 }); if (!g.ok) break; next = g.parts; }
+        return routePipes(ensureFrame(next));
+      },
+    }));
+  };
 }
 
 // A crow's nest on the bag (two columns) with a dorsal gun on it.
@@ -236,6 +259,9 @@ const stationsOf = (p, kind) => count(p, (q) => q.part === 'station' && q.kind =
 export const CATALOGUE = [
   { id: 'hullBay', name: 'Hull bay', icon: '\u{1FAB5}', group: 'frame', blurb: 'A room longer on every deck (the gasbag is stretched to cover it). Heavier, a bigger target.', allowed: (p, o) => (o.hullBay || 0) < PS().HULL_BAYS_MAX, cands: bayCandidates, w: () => 2 },
   { id: 'keel', name: 'Keel deck', icon: '⚓', group: 'frame', blurb: 'A whole deck under the lower deck, with a ladder. Taller, more room.', allowed: (p) => !p.some((q) => q.part === 'deck' && q.row === 'keel'), cands: fromPalette('keel', { ghost: (s) => ({ x0: s.x - COL, x1: s.x + COL, y0: DECK_ROWS.keel - 50, y1: DECK_ROWS.keel + 14 }) }), w: () => 1.4 },
+  // P5 (PLAYTEST1.md 3g): the raft's second and third decks. Offered only while that row is missing, so the Sparrow and the classic ship (which have both) never see them.
+  { id: 'lowerDeck', name: 'Lower deck', icon: '\u{1F3D7}\u{FE0F}', group: 'frame', blurb: 'A covered deck under the main deck, with a ladder down: room for guns, a hold and a lift.', allowed: (p) => !!config.RAFT.ENABLED && !p.some((q) => q.part === 'deck' && q.row === 'lower'), cands: deckCandidates('lower'), w: () => 2 },
+  { id: 'topDeck', name: 'Top deck', icon: '\u{1F3F0}', group: 'frame', blurb: 'An open deck over the main deck, with a ladder up: a place for a gun and a lamp, and a better view.', allowed: (p) => !!config.RAFT.ENABLED && !p.some((q) => q.part === 'deck' && q.row === 'catwalk'), cands: deckCandidates('catwalk'), w: () => 1.6 },
   { id: 'gasbag', name: 'Gasbag', icon: '\u{1F388}', group: 'bag', pic: 'gasbag', blurb: 'More lift. A bigger target with more holes to patch.', allowed: () => true, cands: bagCandidates, w: (c) => (c.sum.hover > 60 ? 4 : 2) },
   { id: 'engine', name: 'Engine pod', icon: '⚙️', group: 'engine', pic: 'engine', blurb: 'More push. Burns coal and steam, and weighs.', allowed: (p) => engines(p) < PS().ENGINES_MAX, cands: fromPalette('engine'), w: (c) => (c.engines < 3 ? 3 : 1.2) },
   { id: 'liftEngine', name: 'Lift engine', icon: '⬆️', group: 'engine', pic: 'engine', picDir: UP, blurb: 'An engine pointing up: lifts her without gas. Uses steam all the time.', allowed: (p) => engines(p) < PS().ENGINES_MAX && count(p, (q) => q.part === 'engine' && q.dir === UP) < 2, cands: fromPalette('engine', { dir: UP }), w: (c) => (c.sum.hover > 58 ? 3 : 1) },
@@ -327,7 +353,7 @@ export function choicesFor(entry, parts, base) {
     try { next = c.apply(parts); } catch { continue; }
     if (!next || next.length === parts.length && JSON.stringify(next) === JSON.stringify(parts)) continue;
     const res = validate(next);
-    if (!res.ok || hijacks(res.layout) > b.hijack) continue;
+    if (!res.ok || (!(config.RAFT.ENABLED && res.layout.platforms.length <= 1) && hijacks(res.layout) > b.hijack)) continue; // (P5: a one-deck ship has nowhere else to put a steam pipe's valve or a rack: people's buttons take the seat first anyway, P3)
     const sum = summaryOf(res);
     good.push({ ...c, parts: next, summary: sum, warns: res.warns, note: noteFor(b.sum, sum, res.warns, b.res.warns) });
   }
@@ -346,7 +372,7 @@ export function needsOf(base, ctx = {}) {
   const crew = Math.max(1, ctx.crew || 4);
   const guns = L.stations.filter((s) => s.kind === 'gun').length;
   return {
-    guns, bomb: !!L.bombBay, raids: ctx.raids || 0, aether: !!ctx.aether, engines: L.engines.length, liftEngines: L.engines.filter((e) => e.dir === UP).length,
+    guns, decks: L.platforms.filter((q) => ['catwalk', 'main', 'lower', 'keel', 'deep'].includes(rowOf(q))).length, bomb: !!L.bombBay, raids: ctx.raids || 0, aether: !!ctx.aether, engines: L.engines.length, liftEngines: L.engines.filter((e) => e.dir === UP).length,
     heavy: sum.hover > R.HEAVY_HOVER || sum.hoverLevel !== 'PASS', // (LIFT: getting heavy)
     steamShort: sum.cruise < R.STEAM_SHORT || sum.steamLevel !== 'PASS', // (STEAM)
     steamLow: sum.cruise < R.STEAM_SHORT, // (the line really sags at cruise: no steam to spare for a big engine; a WARN for a line that runs too hot at idle is the opposite)
@@ -373,6 +399,7 @@ export function fitOf(entry, n) {
     case 'armour': score = n.heavy ? 0.5 : 1.6; break;
     case 'ammo': score = n.guns >= 4 ? 1.8 : 1; break;
     case 'hullBay': case 'keel': score = n.heavy ? 0.3 : 1; break;
+    case 'lowerDeck': case 'topDeck': score = n.decks <= 1 ? 3 : 0.5; hint = 'MORE ROOM'; break; // (P5: a one-deck raft needs a second deck more than anything)
     case 'sail': case 'ladder': case 'pole': case 'lift': score = 0.7; break;
     default: score = 1;
   }

@@ -112,9 +112,10 @@ function generateCurriculum(seed, opts = {}) {
   const V = config.VOYAGE;
   const C = V.CURRICULUM;
   const mode = modeInfo(opts.mode);
-  const table = curriculumTable(opts.mode);
   const second = (opts.voyageNo || 1) > 1;
-  const vary = opts.firstEver === false && config.CREATURES.TITAN.LAIR.VARY.ENABLED; // (P1: a TV that has flown before gets a rolled opening and light lairs; no firstEver (the tools, a direct call) = the tutorial route as ever)
+  const raft = !!opts.raft && config.RAFT.ENABLED && !second; // (P5: a voyage that starts on the raft: its first stop is the Breaker's Yard, the Titan stays off the route, the rest varies as P1's does)
+  const table = raft ? C.TABLES[opts.mode === 'quick' ? 'raft_quick' : 'raft'] : curriculumTable(opts.mode); // (...and it has tables of its own: kinder early stops)
+  const vary = (opts.firstEver === false || raft) && config.CREATURES.TITAN.LAIR.VARY.ENABLED; // (P1: a TV that has flown before gets a rolled opening and light lairs; no firstEver (the tools, a direct call) = the tutorial route as ever)
   const bonus = second ? V.SECOND.DANGER_BONUS : 0;
   const h = second ? 1 : 0; // (the harbour column)
   const rand = mulberry(seed);
@@ -166,6 +167,7 @@ function generateCurriculum(seed, opts = {}) {
       };
       if (opts.gentle && !second && C.WIDE_CAVES.ENABLED) stop.slack = C.WIDE_CAVES.SLACK[Math.round(share * (C.WIDE_CAVES.SLACK.length - 1))]; // (F1: a small ship's caves are wide at first and narrow down to the normal ones, so she is not grinding her keel on the way to the stops that teach)
       if (opts.classic && !second && c === h && C.CLASSIC_STOP1.ENABLED) { stop.gates = [...new Set([...stop.gates, ...C.CLASSIC_STOP1.GATES])]; stop.danger = Math.min(maxD, stop.danger + C.CLASSIC_STOP1.DANGER_ADD); stop.early = true; } // (F1: the classic ship keeps a real threat at stop 1)
+      if (e.yard && !last) { stop.salvage = true; stop.yard = true; stop.reward = Math.round(stop.reward * config.RAFT.YARD.REWARD_MUL); } // (P5: stop.salvage makes it a field-map salvage run, stop.yard the raft's gentle one: stopGoals.js, maps.js)
       if (e.nemesis && !last) stop.nemesis = true;
       if (e.multi && !last) stop.multi = true;
       col.push(stop);
@@ -173,9 +175,9 @@ function generateCurriculum(seed, opts = {}) {
     columns.push(col);
   }
   curriculumRings(columns, seed, table);
-  if (vary) titanLair(columns, seed, n, h, second, true); // (P1: the Titan is placed first, so the light lairs keep clear of it)
+  if (vary && !raft) titanLair(columns, seed, n, h, second, true); // (P1: the Titan is placed first, so the light lairs keep clear of it)
   curriculumLairs(columns, seed, n, h, table, vary);
-  if (!vary) titanLair(columns, seed, n, h, second, false);
+  if (!vary && !raft) titanLair(columns, seed, n, h, second, false);
   curriculumTags(columns, h);
   connectColumns(columns, rand, n);
   return { seed, columns, mode: opts.mode, voyageNo: opts.voyageNo || 1, curriculum: true };
@@ -346,7 +348,7 @@ export const stopById = (voyage, id) => {
 
 // The look and words of a lair by its creature ('kraken' | 'drake' | 'thunderbird'): { ICON, LABEL, NAME, KIND }.
 export const lairOf = (creature) => (creature === 'eel' ? config.CREATURES.EEL.LAIR : creature === 'mother' ? config.CREATURES.MOTHER.LAIR : creature === 'wyrm' ? config.CREATURES.WYRM.LAIR : creature === 'titan' ? config.CREATURES.TITAN.LAIR : creature === 'thunderbird' ? config.CREATURES.THUNDERBIRD.LAIR : creature === 'drake' ? config.CREATURES.DRAKE.LAIR : config.CREATURES.LAIR);
-export const stopName = (s) => (s.flagship ? 'The Flagship' : s.harbour ? 'The Harbour' : s.lair ? lairOf(s.creature).NAME : envInfo(s.env).name);
+export const stopName = (s) => (s.flagship ? 'The Flagship' : s.harbour ? 'The Harbour' : s.yard ? config.RAFT.NAME : s.lair ? lairOf(s.creature).NAME : envInfo(s.env).name);
 
 // Stop numbers run on across the voyages of a campaign: run.base = stops finished before this voyage's harbour.
 export const stopNo = (run, s) => run.base + s.col + 1;
@@ -444,7 +446,16 @@ export function saveModePrefs(p) {
 
 // ---- Which ship a new voyage starts with (remembered on this TV): the Sparrow, or the classic full ship ----
 const SHIP_KEY = 'airshipShip';
-export const START_BUILDS = ['sparrow', 'classic'];
+export const START_BUILDS = ['raft', 'sparrow', 'classic']; // (P5: 'raft' too; a saved 'raft' with RAFT.ENABLED false is the Sparrow: simulation.setStartBuild)
+// The Ship button's next press (network.js; PLAYTEST1.md P5): Auto -> Raft -> Sparrow -> Classic -> Auto. `build` is the ship now forced (ignored while `auto`); the answer is { build, auto }: auto = back to choosing by the crew size
+// (START_BUILD_BY_CREW), else the ship to force. With RAFT.ENABLED false the Raft is not in the round, as before.
+export function shipCycle(build, auto) {
+  const cycle = config.RAFT.ENABLED ? ['raft', 'sparrow', 'classic'] : ['sparrow', 'classic'];
+  if (auto) return { build: cycle[0], auto: false };
+  if (config.VOYAGE.START_BUILD_BY_CREW.ENABLED && build === 'classic') return { build: null, auto: true };
+  const i = cycle.indexOf(build);
+  return { build: i < 0 ? cycle[1] : cycle[(i + 1) % cycle.length], auto: false }; // (a playtest build goes to the first quick start)
+}
 export function loadStartBuild() {
   try {
     const v = localStorage.getItem(SHIP_KEY);

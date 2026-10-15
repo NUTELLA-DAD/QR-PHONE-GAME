@@ -46,7 +46,7 @@ export function updateCrewScale(state, dt) {
   const run = mainShip(state).main ? state.run : null; // (the run and its spare gasbags belong to the main ship)
   // (The Yard: the danger follows the ship's fighting strength too, shipPower.js: a small starting ship meets lighter enemies, a built-up one the classic danger. Only on a voyage that started
   // with a build, and only for ship 0, whose numbers the world's enemies use; the classic ship's ratio is 1, so her numbers are not touched.)
-  if (run && run.power != null && CS().ENABLED && !config.PVP.ENABLED) for (const k of Object.keys(config.YARD.POWER.KEYS)) cs[k] *= powerMul(run.power, k);
+  if (run && run.power != null && CS().ENABLED && !config.PVP.ENABLED) for (const k of Object.keys(config.YARD.POWER.KEYS)) cs[k] *= powerMul(run.power, k, run.raft && config.RAFT.ENABLED ? config.RAFT.POWER_SCALE : null);
   if (state.phase === 'lobby' && run && !run.limps) run.spares = run.sparesMax = sparesFor(state);
 }
 

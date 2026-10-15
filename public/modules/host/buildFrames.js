@@ -77,4 +77,12 @@ export function calmFor(world, phases) {
     && !(g && g.phase !== 'sinking' && g.phase !== 'leaving') && !(world.creature && !world.creature.dying);
 }
 
+// P5: the same question for a voyage that started on the RAFT while she has fewer guns than RAFT.BOTS.BUILD_ANY_PHASE_UNTIL_GUNS: there is nobody to send off a gun, and the gun is what she is building, so the phones' arrows and the bots build in ANY phase of
+// the pacing (still never in a fall, with raiders aboard, a fire, a gunship or a creature). Everything else: calmFor(world, phases).
+export function framesCalm(world, phases) {
+  const R = config.RAFT, ship = world.ships && world.ships[0];
+  if (R && R.ENABLED && world.run && world.run.raft && ship && ship.layout && ship.layout.stations.filter((s) => s.kind === 'gun').length < R.BOTS.BUILD_ANY_PHASE_UNTIL_GUNS) return calmFor(world, ['build', 'peak', 'calm', 'escape']);
+  return calmFor(world, phases);
+}
+
 export const buildersOf =(f) => Object.values(f.by || {}).filter((r) => r.name).sort((a, b) => b.n - a.n || String(a.name).localeCompare(b.name)).map((r) => r.name);

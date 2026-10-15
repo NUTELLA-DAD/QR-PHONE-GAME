@@ -1,7 +1,7 @@
 import { config } from '../../config.js';
 import { mainShip, shipOf, crewOf } from './ships.js';
 import { crewAboard, crewHeads } from './crewscale.js';
-import { saveStartBuild } from './voyage.js';
+import { saveStartBuild, shipCycle } from './voyage.js';
 import { pageCount } from './book.js';
 
 // What a phone's input message does to its player (also used by tools/controls.mjs, which plays a person without a socket).
@@ -228,22 +228,16 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
   const showShip = () => {
     const sb = simulation.state.startBuild;
     const BC = config.VOYAGE.START_BUILD_BY_CREW;
-    const html = simulation.state.startBuildAuto ? `Ship: Auto (${simulation.pickStartBuild() === 'classic' ? 'Classic' : 'Sparrow'})<br><small style="font-size:12px;opacity:.75">Sparrow for ${BC.max} crew or fewer, else Classic</small>` : sb === 'playtest' ? 'Ship: your build<br><small style="font-size:12px;opacity:.75">from the build page</small>' : 'Ship: ' + (sb === 'classic' ? 'Classic' : 'Sparrow') + `<br><small style="font-size:12px;opacity:.75">${sb === 'classic' ? 'the full ship from the start' : 'start small, build at the sky-docks'}</small>`;
+    const NAMES = { raft: 'Raft', sparrow: 'Sparrow', classic: 'Classic' }; // (P5: the Ship button cycles Auto / Raft / Sparrow / Classic; the Sparrow and the classic are QUICK STARTS: a ship that already works)
+    const small = NAMES[BC.small] || 'Sparrow';
+    const html = simulation.state.startBuildAuto ? `Ship: Auto (${NAMES[simulation.pickStartBuild()] || 'Sparrow'})<br><small style="font-size:12px;opacity:.75">${small} for ${BC.max} crew or fewer, else Classic</small>` : sb === 'playtest' ? 'Ship: your build<br><small style="font-size:12px;opacity:.75">from the build page</small>' : 'Ship: ' + (NAMES[sb] || 'Sparrow') + (sb === 'raft' ? '<br><small style="font-size:12px;opacity:.75">a tiny raft: build it all, stop by stop</small>' : `<br><small style="font-size:12px;opacity:.75">QUICK START: ${sb === 'classic' ? 'the full ship from the start' : 'start small, build at the sky-docks'}</small>`);
     if (shipButton.innerHTML !== html) shipButton.innerHTML = html;
   };
   shipButton.onclick = () => {
-    const sb = simulation.state.startBuild;
-    if (simulation.state.startBuildAuto) { // (F1: Auto -> Sparrow -> Classic -> Auto: the first two force a ship, the last goes back to choosing by the crew size)
-      simulation.setStartBuild('sparrow');
-      saveStartBuild('sparrow');
-    } else if (config.VOYAGE.START_BUILD_BY_CREW.ENABLED && sb === 'classic') {
-      simulation.setStartBuild(simulation.pickStartBuild(), 'auto');
-      saveStartBuild(null);
-    } else {
-      const next = sb === 'classic' ? 'sparrow' : 'classic'; // (a playtest build goes to classic first)
-      simulation.setStartBuild(next);
-      saveStartBuild(next);
-    }
+    const next = shipCycle(simulation.state.startBuild, simulation.state.startBuildAuto); // (P5: Auto -> Raft -> Sparrow -> Classic -> Auto; the first presses force a ship, the last goes back to choosing by the crew size - F1)
+    if (next.auto) simulation.setStartBuild(simulation.pickStartBuild(), 'auto');
+    else simulation.setStartBuild(next.build);
+    saveStartBuild(next.auto ? null : next.build);
     showShip();
   };
   setInterval(() => { showMode(); showDaily(); showShip(); }, 500); // (a finished daily voyage updates today's best)
