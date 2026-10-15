@@ -7,6 +7,7 @@ import { createPortholes } from './portholes.js'; // round windows: friends off 
 import { createSfx } from './sfx.js';
 import { createMenu } from './menu.js';
 import { createPerfGovernor, perfState } from './perf.js';
+import { createReplayCam, installFootage } from './replayCam.js'; // (L7: PLAY OF THE MISSION, the real-footage replay: the camera copies the 3D canvas into small JPEGs, the projector plays them on the scorecard - view only)
 import { autoDetect, rememberProbe } from '../view3d/detect.js'; // (WP14: no imports of its own, so Three.js is not loaded when the probe says 2D)
 import { applyBuild } from '../../shipLayout.js'; // (ship 0's compatibility forward: the dev build below is applied before the simulation reads the layout)
 import { BUILDS } from './shipBuild.js';
@@ -262,8 +263,13 @@ const planPortholes = (now, view) => {
   window.portholesDebug.plan = plan;
   return plan;
 };
+let drawn = null; // (what the last picture was drawn from: the replay camera copies that canvas)
+const replayCam = createReplayCam({ replay: simulation.replay, canvas2d: canvas, canvas3d, state: simulation.state, level: () => perfState.level });
+installFootage();
+window.replayCam = replayCam; // (dev / the checks)
 const drawFrame = (now, view) => {
   window.__lastView = view;
+  drawn = null;
   if (Number.isFinite(window.__frozenNow)) now = window.__frozenNow; // (dev / the screenshot check: the picture's clock is held by hand so a scene is the same every time)
   if (v3.active && v3.view) {
     let ok = false, ph = { items: [] };
@@ -285,10 +291,12 @@ const drawFrame = (now, view) => {
       try { hv = v3.view.hudView ? v3.view.hudView(view, canvas.width, canvas.height) : view; } catch { hv = view; } // (WP11: while a cinematic moves the camera the arrows and marks follow it)
       const layers = view.inset ? [...HUD_LAYERS, v3.view.portholeLive ? 'insetframe' : 'inset'] : HUD_LAYERS; // (Versus split: the 3D porthole needs only its frame, the Low tier keeps the whole 2D one)
       renderer.renderFrame(now, hv, { layers, p3: v3.view.hud3d, dark3d: v3.view.world ? v3.view.world.night : 0, portholes: ph.items, portholesLive: v3.view.portholesLive });
+      drawn = { use3D: true, view, p3: v3.view.hud3d };
       return;
     }
   }
   renderer.renderFrame(now, view, { portholes: planPortholes(now, view).items });
+  drawn = { use3D: false, view };
 };
 const network = initHostNetwork({ simulation });
 // Playtest in co-op with bots (&bots=N): they climb aboard and the ship casts off at once (without &bots the lobby opens with its QR code for phones).
@@ -393,6 +401,7 @@ function frame(now) {
   if (!view3dKicked && viewChoice === '3d') { view3dKicked = true; use3D(); }
   const d0 = performance.now();
   if (view) guard('draw', () => drawFrame(now, view));
+  if (drawn) guard('replay', () => replayCam.grab(now, drawn)); // (L7: a picture for the film, in the same task as the draw)
   const drawMs = performance.now() - d0;
   meterTick(now, gap, drawMs);
   if (!paused) perf.update(now, gap, drawMs);
