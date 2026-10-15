@@ -36,6 +36,7 @@ import { createRingCastle } from './ringCastle.js'; // LOOP R2: the ring castle 
 import { GAR_LIVE } from './garrisonKit.js';
 import { createAway3d } from './away3d.js'; // CASTLE.md A3: the away team in 3D (the rope ladder, the flare, the objective props and signs, the prisoners)
 import { createTreasure3d } from './treasure3d.js'; // CASTLE.md A2 in 3D: the outpost vault, the chests and the sack of gold (the HUD keeps only their words)
+import { createDuel3d } from './duel3d.js'; // CASTLE.md A4 in 3D: the sword fights - the soldiers who leave a squad's block, the cutlass in a man's hand, the clash and hit effects (the HUD keeps only the words)
 import { createStructure3d } from './structure3d.js'; // STRUCTURE.md WP5: the segments of the frame in 3D (soot, cracks, the warning edge and seam, the split, the falling half and its crash)
 import { createFrames3d } from './frames3d.js'; // LOOP.md R4: the scaffold of a part the crew are building in flight (a G4 frame): a blueprint ghost, steel layers, a gold band, the built moment
 import { createScrap3d } from './scrap3d.js'; // LOOP.md G2 in 3D: the rivet plates of the scrap patch on the ship's hull
@@ -214,6 +215,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     crew: (key) => crew.anchor(key),
     away: () => (away3d && away3d.live ? away3d : null), // (A3: the HUD's 2D ladders, flares, markers and figures step back while the 3D ones are drawn; away.signAt(ob) = where an objective's sign board is)
     treasure: () => (treasure3d && treasure3d.live ? treasure3d : null), // (A2 in 3D: the HUD's 2D vault, chests and sacks step back while the 3D ones are drawn: only their words and the grab bar stay)
+    duel: () => (duel3d && duel3d.live ? duel3d : null), // (A4 in 3D: the HUD's 2D fighters, guard arcs and blow effects step back while the 3D ones are drawn)
   };
   const teamColorOf = (p, sh) => { try { const side = p.team ? teamOf(p.team) : sh ? sh.team : state.ships[0] && state.ships[0].team; return side && side.color ? side.color : null; } catch { return null; } };
   // WP4: the particles (fire, smoke, steam, sparks, splinters, muzzle flashes, rings; vfx.js reads the game's state, particles.js draws). If they cannot be made the old flame cones and puff balls stay.
@@ -236,6 +238,9 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   let treasure3d = null; // CASTLE.md A2 in 3D: the vault, the chests and the sacks of gold (treasure3d.js; if it cannot be made the HUD draws the 2D shapes)
   try { treasure3d = createTreasure3d({ parent: worldRoot, state, models, P: () => (vfx && vfx.P) || null }); } catch (e) { console.warn('view3d treasure off', e); }
   V.treasure = treasure3d;
+  let duel3d = null; // CASTLE.md A4 in 3D: the soldiers of a sword fight, the cutlass in a man's hand, the clash / hit / KO effects (duel3d.js; if it cannot be made the HUD draws the 2D fighters)
+  try { duel3d = createDuel3d({ parent: worldRoot, state, P: () => (vfx && vfx.P) || null }); } catch (e) { console.warn('view3d duel off', e); }
+  V.duel = duel3d;
   let scrap3d = null; // LOOP.md G2 in 3D: the scrap patch's rivet plates on the hull (scrap3d.js)
   try { scrap3d = createScrap3d({ parent: worldRoot, state, models }); } catch (e) { console.warn('view3d scrap off', e); }
   V.scrap = scrap3d;
@@ -344,7 +349,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     for (const p of Object.values(state.players)) {
       if (!p.fly || p.hj || p.enemy || p.connected === false) continue;
       const aw = away3d && p.on && p.on.away ? away3d.specFor(p) : null; // (A3: a man on the ground stands at his own depth and may carry the great banner or a keg)
-      const rec0 = aw ? aw.rec : p;
+      const rec0 = aw ? (duel3d ? duel3d.rec(p, aw.rec) : aw.rec) : p; // (A4 in 3D: a man in a sword fight holds a cutlass and takes a guard / parry / hurt pose)
       crew.placeFly(p.id, treasure3d ? treasure3d.rec(rec0) : rec0, { teamColor: teamColorOf(p, null), z: aw ? aw.z : undefined });
     }
     if (away3d) { try { away3d.placeCrew(crew); } catch (e) { logOnce('away3d crew', e); } } // (A3: freed prisoners and the men in the cage)
@@ -524,6 +529,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     if (scrap3d) { try { scrap3d.update({ t }); } catch (e) { logOnce('scrap3d', e); } } // (the plates ride the ship's own group: after she is placed)
     if (frames3d) { try { frames3d.update({ t, dt }); } catch (e) { logOnce('frames3d', e); } } // (the scaffold rides the ship's own group, like the plates)
     if (treasure3d) { try { treasure3d.update({ t, dt, night: world.night, tier }); } catch (e) { logOnce('treasure3d', e); } }
+    if (duel3d) { try { duel3d.update({ t, dt, night: world.night, tier }); } catch (e) { logOnce('duel3d', e); } }
     syncSky();
     const main = state.ships[0];
     try { flyers.update(t, main ? main.pose.vx || 0 : 0, { dt, zoomEq: h / Math.max(1, cam.visH), lineup: V.enemyLineup }); } catch (e) { logOnce("flyers", e); }
@@ -638,7 +644,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   };
   V.setTod = (name) => { S.tod = name || ''; };
   V.resetOrbit = () => { lastPivot.set(0, 0, 0); }; // WP13: the next orbit frame starts from the starting view again (the build page's double-click)
-  V.dispose = () => { for (const part of [beams, lightning, fungal, porthole, portholes3d, weather, teamFlags, castle, garrison, setpieces, away3d, treasure3d, scrap3d, frames3d, struct3d, fortress]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
+  V.dispose = () => { for (const part of [beams, lightning, fungal, porthole, portholes3d, weather, teamFlags, castle, garrison, setpieces, away3d, treasure3d, duel3d, scrap3d, frames3d, struct3d, fortress]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
 
   applyDetail();
   console.info('view3d: not drawn yet - ' + NOT_DRAWN.join('; '));

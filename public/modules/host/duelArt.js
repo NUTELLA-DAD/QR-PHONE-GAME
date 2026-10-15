@@ -1,7 +1,7 @@
 // THE SWORD FIGHTS, drawn (CASTLE.md package A4; duel.js keeps state.away.duel). The soldiers in a fight - the ones who have left their squad's block to fight a man - are drawn here one by one: running, standing off with the sword
 // low, raising it for the blow (a red "!" key over his head with a ring that closes on the moment the blow lands, the same time the phone's cue ring takes), recovering, staggered (the stars), lying down after the third hit, running off.
 // A man with his guard up has a shield-arc in front of him: gold while a blow landing now would be a PARRY, blue after. The swing's arc, the hit burst, the parry sparks and the KO are short effects (duel.fx).
-// The 3D view draws the squads' blocks (view3d/garrison3d.js) but has no swing / block / stagger / lying poses yet (a later art pass), so the fighters are 2D shapes on the HUD there, through the camera, exactly as the guards are
+// The 3D view draws the fighters itself now (view3d/duel3d.js: real 3D soldiers in held poses, the cutlass in a man's hand, the clash and hit effects) and calls draw with live3d true: nothing is drawn here then. With the 3D view off, or when its kit could not be built, they are 2D shapes on the HUD, through the camera, exactly as the guards are
 // (treasureArt.js). Every shape draws at the CURRENT transform and takes the scale of the thing (w) and of the words (u). Nothing wobbles: the legs and the stars step on 1/8 s keys.
 import { config } from '../../config.js';
 
@@ -193,9 +193,9 @@ export function createDuelArt({ ctx, world, ink }) {
   };
 
   // Everything, at the CURRENT transform in world units (the 2D pass) or through a projector (the 3D HUD pass: proj(x, y) -> { x, y, u, w } or null).
-  const draw = (time, tu = 1, proj = null) => {
+  const draw = (time, tu = 1, proj = null, live3d = false) => { // (live3d: the 3D view draws the soldiers, the guard and the blows itself, view3d/duel3d.js: nothing here then)
     const S = world.away, D = S && S.duel;
-    if (!S || !S.on || !D || !D.on) return;
+    if (!S || !S.on || !D || !D.on || live3d) return;
     const k8 = Math.floor(time * 8);
     const at = (x, y) => (proj ? proj(x, y) : { x, y, u: tu, w: 1 + (tu - 1) * 0.6 });
     for (const m of Object.values(world.players)) { // guards up

@@ -400,9 +400,16 @@ export function createCrewLayer(parent) {
     at('x0', { type: 'grunt', species: 'skeleton', scale: 1, swingT: now - 40, freezeK: 0, hearts: undefined }, X(6), R3);
     at('x1', { type: 'grunt', species: 'skeleton', scale: 1, swingT: now - 180, freezeK: 0, hearts: undefined }, X(7), R3);
   }
+  // Page 3 (A4 in 3D): a man in a sword fight, facing right (top row) and left (bottom row): ready, guard, wound up, struck, parried, hurt (the cutlass in his hand).
+  function lineupDuel(ax, ay) {
+    const now = L.now, X = (i) => ax + (i - 2.5) * 130;
+    const at = (k, rec, x, y) => L.placeAt('ld' + k, { id: 'ld' + k, x: 0, y: 0, face: 1, hearts: 3, species: 'fox', color: '#e8554a', carry: 'cutlass', freezeK: 0, ...rec }, x, y, 0);
+    [{ dlPose: 'ready' }, { dlPose: 'guard' }, { dlPose: 'ready', swingT: now - 60 }, { dlPose: 'ready', swingT: now - 180 }, { dlPose: 'parry' }, { dlPose: 'hurt', hurtT: 0.7 }].forEach((r, i) => { at('r' + i, r, X(i), ay + 95); at('l' + i, { ...r, face: -1 }, X(i), ay - 95); });
+  }
   // Four rows, 190 apart. ay = the world point (y UP) of the line-up's middle (the camera looks at ay + 95).
   L.lineup = (ax, ay, page) => { // call between begin() and end(), once a frame
     if (page === 2) return lineupKeys(ax, ay);
+    if (page === 3) return lineupDuel(ax, ay);
     const sp = config.CREW_SPECIES, cols = ['#3a86ff', '#e8554a', '#f2b04a', '#7ac27a', '#b07ad9', '#4ac2c9', '#e87aa8', '#c9c24a'];
     const items = ['hammer', 'sword', 'extinguisher', 'ammo', 'coal', 'sandbag', 'hookshot', 'crate'];
     const gap = 112, now = L.now, X = (i) => ax + (i - 3.5) * gap;

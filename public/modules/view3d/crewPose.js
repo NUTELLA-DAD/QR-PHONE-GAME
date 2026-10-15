@@ -32,6 +32,20 @@ const CLIMB = [
 const HAND = { sword: [-1.5, 0.9], cutlass: [-1.45, 0.6], hammer: [-1.35, 0.8], club: [-1.15, 0.45], cleaver: [-1.4, 0.6], extinguisher: [-0.8, 0.8], towline: [-0.6, 0.7], bomb: [-0.5, 0.8], hookshot: [-PI, 1.45] };
 export const MELEE = new Set(['sword', 'cutlass', 'hammer', 'club', 'cleaver']);
 
+// A4 in 3D: a man in a sword fight, with a cutlass in his hand (duel3d.js rec() gives him p.dlPose: 'ready' | 'guard' | 'parry' | 'hurt'; a swing is the usual p.swingT). The held arm's angle a and the blade's tilt from the vertical b
+// (+ = forward) give the item's angle in the hand: itemRel = -b - a (the blade's direction in the arm's frame is rotZ(a + itemRel) of the item's +y). Every pose holds for 8 fps keys: the swing is raised (key 0) and struck (keys 1 to 3: the blow is held a moment).
+function duelPose(o, H, O, kind, age, walking) {
+  const set = (a, b, lean, other) => { o[H] = a; o.itemRel = -b - a; o.lean = lean; o[O] = other; };
+  o.facing = 'side';
+  if (kind === 'hurt') { o.mode = 'duel-hurt'; set(0.25, 1.35, -0.3, -0.55); o.roll = 0.2; o.headTilt = 0.3; o.scarf = 0.5; }
+  else if (kind === 'parry' && age >= 375) { o.mode = 'duel-parry'; set(1.6, 0.7, 0.14, 0.9); o.scarf = 0.4; }
+  else if (age < 125) { o.mode = 'duel-wind'; set(2.7, -0.6, -0.15, 0.4); }
+  else if (age < 375) { o.mode = 'duel-strike'; set(1.45, 1.9, 0.3, -0.5); o.swoosh = age < 250 ? 70 : 0; }
+  else if (kind === 'guard') { o.mode = 'duel-guard'; set(1.3, 0.05, -0.05, 1.0); }
+  else { o.mode = 'duel-ready'; set(0.95, 0.4, 0.06, -0.25); }
+  if (walking && o.mode === 'duel-ready') o.mode = 'walk';
+}
+
 export function newPose() {
   return {
     aA: 0, aB: 0, lA: 0, lB: 0, lean: 0, bob: 0, headTilt: 0, tail: 0.45, scarf: 1.15, roll: 0, pivotY: 30, up: 0, sx: 1, sy: 1,
@@ -60,7 +74,9 @@ export function computePose(o, c) {
   const sq = fin(p.squash);
   if (sq > 0.05 && sq > st.lastSquash + 0.05) st.squashK = K + 2;
   st.lastSquash = sq;
-  const air = !!(p.air || p.fly);
+  const grounded = !!(p.on && p.on.away && p.on.mode !== 'home' && !p.fall); // (A3 / A4: a man on the ground, a wall or a ladder has p.fly set by the sim, but he is not flying: he stands, walks, climbs and fights)
+  const flying = !!p.fly && !grounded;
+  const air = !!(p.air || flying);
   if (st.wasAir && !air) st.squashK = Math.max(st.squashK || 0, K + 2);
   if (air && !st.wasAir) st.airK0 = K;
   st.wasAir = air;
@@ -80,7 +96,7 @@ export function computePose(o, c) {
     o.mode = 'chute'; o.facing = 'side'; o.aA = o.aB = 2.55; o.lA = 0.22; o.lB = -0.1; o.open = 1; o.scarf = -0.3;
     return o;
   }
-  if (p.fly) {
+  if (flying) {
     o.facing = 'side';
     if (p.cannon) { // fired from the crew cannon: flies like a bullet, head first, arms ahead
       o.mode = 'cannon'; o.roll = c.heading || 0; o.pivotY = 30;
@@ -132,7 +148,9 @@ export function computePose(o, c) {
   if (walking) { o.lA = w.lA; o.lB = w.lB; o.aA = w.aA; o.aB = w.aB; o.bob = w.bob; o.lean = w.lean; o.facing = 'side'; o.mode = 'walk'; o.scarf = k2 ? 0.1 : 0.35; o.tail = k2 ? 0.25 : 0.65; }
 
   // arms by what he is doing (the legs keep the walk)
-  if (p.windup > 0) { o.mode = 'windup'; o.facing = 'side'; o[H] = 2.9; o.lean = -0.1; }
+  const duel = !!p.dlPose && item === 'cutlass' && !p.lock; // (A4 in 3D: a man in a sword fight, duel3d.js hands him a cutlass and the pose it wants)
+  if (duel) duelPose(o, H, O, p.dlPose, swingAge, walking);
+  else if (p.windup > 0) { o.mode = 'windup'; o.facing = 'side'; o[H] = 2.9; o.lean = -0.1; }
   else if (swingAge < 250) { o.mode = 'swing'; o.facing = 'side'; o[H] = swingAge < 125 ? 2.7 : 0.55; o.lean = swingAge < 125 ? -0.12 : 0.18; if (MELEE.has(item)) o.swoosh = swingAge < 200 ? (item === 'sword' || item === 'cutlass' ? 70 : 45) : 0; }
   else if (p.lock) { // manning a station: hands on the controls; working it (firing, cranking) alternates the hands every key
     o.mode = 'station'; o.facing = 'side'; o.aA = o.aB = 1.3;
@@ -144,7 +162,7 @@ export function computePose(o, c) {
   } else if (p.fire && p.act && p.act.hold) { o.mode = 'work'; o.facing = 'side'; o.aA = k2 ? 1.25 : 0.9; o.aB = k2 ? 0.9 : 1.25; o.lean = k2 ? 0.1 : 0.03; } // working away (hammering, bailing)
   if (item === 'hookshot' && p.hook) o.itemRel = -PI;
   // the held arm's tool keeps its angle in the walk
-  if (tool && walking && !(swingAge < 250) && !(p.windup > 0)) o[O] = w[O];
+  if (tool && walking && !duel && !(swingAge < 250) && !(p.windup > 0)) o[O] = w[O];
   o.headTilt = 0;
   return o;
 }
