@@ -4219,6 +4219,19 @@ export const config = {
     COL: { WOOD: '#8a6444', WOOD_DARK: '#5e4129', ROPE: '#c9a66b', IRON: '#3f3b3e', KEG: '#a37a45', KEG_BAND: '#3d3a3c', POWDER: '#2b2724', COAL: '#2c2a2b', FIRE: '#ff8a2a', FLAME_CORE: '#ffd9a0', SMOKE: '#59534f', GOLD: '#ffd23f', BANNER: '#a8302c', BANNER_GOLD: '#d9b24e', SIGN_POST: '#5e4129', BOARD: '#fff7e0', JAM: '#4b3a2c' },
     CAP: { CELLS: 220, QUADS: 24 },
   },
+  // A4 THE SWORD FIGHTS IN 3D (view3d/duel3d.js + duelKit.js, CASTLE.md A4; view only: it reads state.away.duel and each man's p.on.dl): the soldiers who leave a squad's block to fight one man are real 3D men in the garrison's own
+  // colours (the palette is RING3D.ART[variant]; the garrison's COL = RING3D.GAR.COL), instanced in held poses on 8 fps keys: guard, tell (the sword raised, a red "!" key and the closing ring), strike, stagger, down, run, flee. The
+  // man holds a cutlass in his hand during a fight and for HOLD s after (poses in crewPose.js: ready, guard, parry, hurt for the first part of his i-frames: while hurtT is above HURT_AT). The HUD's 2D fighters step back while this is live.
+  // H = a soldier's height (px; the model is 118), Z = the depth he stands at (the man walks at AWAY3D.Z.GROUND 70) and ZSPREAD the step between soldiers, ALPHA = how far he is turned toward the viewer (radians; 0 = a pure
+  // profile), CAP = soldiers (and dropped swords) drawn at most per tier (the draw calls stay the same whatever the number). DROP.LIFE = seconds a dropped sword lies there. COL = the effects' colours.
+  DUEL3D: {
+    ENABLED: true,
+    H: 150, Z: 46, ZSPREAD: 14, ALPHA: 0.62,
+    CAP: { low: 12, medium: 24, high: 32 },
+    HOLD: 1.5, HURT_AT: 0.4,
+    DROP: { LIFE: 8 },
+    COL: { RING: '#fff7e0', GOLD: '#ffd23f', STAR: '#ffd23f', PIP_ON: '#ff4a3a', PIP_OFF: '#3a3a3a', GUARD_OK: '#ffd23f', GUARD_LATE: '#6fb3e8', PARRY: '#ffd23f', FLANK: '#ffd23f' },
+  },
   // THE TREASURE IN 3D (view3d/treasure3d.js + treasureKit.js, CASTLE.md A2 / 3D.md section 34; view only: it reads state.away.tre and state.chestHold): the outpost's stone VAULT with an iron door that swings open in
   // held steps, the chests and the sack of gold lying on the ground / on the hookshot's line / carried by a PAIR / stacked in the ship's hold, and (crewParts.js) the chest and the sack in a man's arms. Open-sky maps only.
   // Z: the depth things stand at (the man walks at AWAY3D.Z.GROUND 70; the vault stands behind the chests, its door face at VAULT + depth / 2). SIZE: 1 = a chest 84 px wide (the 2D one was 74). DOOR = the share of

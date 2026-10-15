@@ -175,7 +175,7 @@ outlineMat.customProgramCacheKey = () => 'ink-outline';
 //   inkDouble(geometry)             -> the doubled geometry ({ n } in userData: the vertex count of one copy)
 //   toonVCInk / plainVCInk          the materials (look.toon picks); toonVCInkS is the same for small things (Detail: low drops their ink)
 export const inkLook = { on: { value: 1 }, onSmall: { value: 1 }, color: { value: new THREE.Color(INK) } };
-function inkCall(m, small) {
+export function inkCall(m, small) {
   const prev = m.onBeforeCompile;
   m.onBeforeCompile = (sh, r) => {
     if (prev) prev(sh, r);

@@ -3635,7 +3635,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
         crewMarks(p, p.id, shipOf(world, p) || mainShip(world));
         if (p.on && p.on.away) { // (A0: the label over a man on the ground, over his name)
           const a = p3.crew(p.id), q = a && proj([a.x, a.y + ((a.ko ? 66 : 128) * (a.sc || 1) + (a.up || 0)) + 30 * (a.sc || 1), a.z]); // (the name's own spot: the label stands a few lines above it)
-          if (q && !awayTags.some((t) => Math.abs(t.x - q.x) < 200 * zs && Math.abs(t.y - q.y) < 70 * zs) && awayTags.push({ x: q.x, y: q.y })) { at({ x: q.x, y: q.y - 62 * zs }, zs); verbTag('AWAY TEAM', 0, 0, 1); }
+          if (q && !(p3.duel && p3.duel() && world.groundSys && world.groundSys.duel && world.groundSys.duel.engaged(p)) && !awayTags.some((t) => Math.abs(t.x - q.x) < 200 * zs && Math.abs(t.y - q.y) < 70 * zs) && awayTags.push({ x: q.x, y: q.y })) { at({ x: q.x, y: q.y - 62 * zs }, zs); verbTag('AWAY TEAM', 0, 0, 1); }
         }
       }
       try { // (A0: the 3D castle has no ladders, rope, flare or pickup ring of its own yet - A3 - so the HUD draws them through the camera: the walkways and wall ladders, the rope ladder, a lit flare, the pickup marker)
@@ -3657,7 +3657,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
           }
           groundArt.drawObjectives(K8 / 8, zs, (x, y) => { const a = pt(x, y); return a ? { x: a.x, y: a.y, u: zs * 0.85, w: Math.max(0.35, px(x, y)) * 1.1 } : null; }, A3); // (CASTLE.md A1: the objectives' markers, the prisoners and the carried banner, through the camera)
           derelictArt.draw(K8 / 8, zs, (x, y) => { const a = pt(x, y); return a ? { x: a.x, y: a.y, u: zs * 0.85, w: Math.max(0.35, px(x, y)) * 1.1 } : null; }, true); // (G5 / G6: no wreck or balloon model in 3D yet: the HUD draws a stand-in through the camera)
-          duelArt.draw(K8 / 8, zs, (x, y) => { const a = pt(x, y); return a ? { x: a.x, y: a.y, u: zs * 0.85, w: Math.max(0.35, px(x, y)) * 1.1 } : null; }); // (CASTLE.md A4: the soldiers in a sword fight have no 3D swing, block, stagger or lying pose yet: the HUD draws them through the camera)
+          duelArt.draw(K8 / 8, zs, (x, y) => { const a = pt(x, y); return a ? { x: a.x, y: a.y, u: zs * 0.85, w: Math.max(0.35, px(x, y)) * 1.1 } : null; }, !!(p3.duel && p3.duel())); // (CASTLE.md A4: the 3D view draws the soldiers, the cutlass, the guard and the blows (duel3d.js); only when it cannot does the HUD draw them through the camera)
           treasureArt.draw(K8 / 8, zs, (x, y) => { const a = pt(x, y); return a ? { x: a.x, y: a.y, u: zs * 0.85, w: Math.max(0.35, px(x, y)) * 1.1 } : null; }, !!(p3.treasure && p3.treasure())); // (CASTLE.md A2: the vaults, chests and guards, through the camera; while the 3D view draws the vault, chests and sacks only their words, the grab bar and the guards stay here)
         }
       } catch (e) { /* (a nicety: never stop the frame) */ }

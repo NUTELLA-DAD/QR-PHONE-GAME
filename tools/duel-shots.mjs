@@ -1,7 +1,7 @@
 // CASTLE.md A4, GROUND SWORD FIGHTS in a real headless Chrome: a picture of the TV for a soldier telegraphing, a crewman swinging, a parry stagger, a soldier KO'd and two crew flanking, and of the phone with its parry cue.
 // Starts its OWN server on a free port and stops it by its PID at the end (never kills node globally); the host and one phone are two Chrome pages on that server. The sim is stepped by hand (frozen otherwise), so
 // every picture is the same each time.
-//   node tools/duel-shots.mjs [--out DIR] [--port N] [--view 2d|3d]
+//   node tools/duel-shots.mjs [--out DIR] [--port N] [--view 2d|3d] [--prefix NAME]
 // Default DIR is ../3d-screenshots (the owner's screenshot folder next to the repo); files are named duel_<view>_<what>.png (tv shots and the phone's). Exit 1 on any console error or a failed check.
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -15,6 +15,7 @@ const arg = (k, d) => { const i = argv.indexOf('--' + k); return i < 0 ? d : arg
 const out = path.resolve(arg('out', 'C:/Users/kenny/Downloads/AIRSHIP/airship/3d-screenshots'));
 const port = Number(arg('port', 6600 + Math.floor(Math.random() * 300)));
 const view = arg('view', '2d');
+const prefix = arg('prefix', 'duel_' + view); // (the file names: <prefix>_<what>.png)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failed = 0;
 const check = (cond, msg) => { console.log((cond ? '  ok   ' : '  FAIL ') + msg); if (!cond) failed++; };
@@ -100,10 +101,12 @@ window.__a = {
   squad() { return this.face().squads.find((s) => s.kind === 'plaza'); },
   foe() { return this.D().foes.find((F) => ['run', 'ready', 'draw', 'tell', 'recover', 'stagger', 'down'].includes(F.st)); },
   async settle(n = 60) { for (let i = 0; i < n; i++) await this.frame(); },
+  // holds a man in the middle of a swing for the picture: his swing is stamped AGE ms ago over and over (the pose of a swing is read from that stamp, and it only lasts a few eighths of a second), null lets go
+  holdSwing(age) { clearInterval(window.__hs); if (age == null) return 1; const p = this.me(); window.__hs = setInterval(() => { p.swingT = performance.now() - age; }, 6); return 1; },
   stand(p, x, face = 0) { const f = this.face(face); p.fall = false; p.fly = true; p.air = false; p.conn = null; p.lock = null; p.ko = 0; p.koGrace = 0; p.carry = null; p.hearts = 3; p.hurtT = 0; p.on = { away: true, mode: 'walk', deck: null, gy: f.y, s: 0, edgeT: 0, flareCd: 0, flareT: 0, strand: 0, gone: false, since: 0 }; p.x = x; p.y = f.y; p.jx = p.jy = 0; p.face = 1; return p; },
   until(fn, n = 900) { for (let i = 0; i < n; i++) { if (fn()) return i; this.step(1); } return fn() ? n : -1; },
   // a fresh fight: the first plaza squad notices Mia 380 px away on its outer side; returns once its first soldier stands off her
-  fight(n = 1) { const a = this, f = a.face(), q = a.squad(); for (const s of f.squads) if (s.kind === 'plaza' && s !== q) s.huntCd = 1e9; q.huntCd = 0; q.hunt = null; q.state = 'muster'; q.x = q.home; q.n = q.max = n; a.D().foes.length = 0; a.D().fx.length = 0; a.park(q.home + (q.home < f.x ? 120 : -120), f.y - 760); a.step(30); const p = a.stand(a.me(), q.home + (q.home < f.x ? -380 : 380)); a.step(5); return a.until(() => { const F = a.foe(); return F && F.st === 'ready'; }); },
+  fight(n = 1) { const a = this, f = a.face(), q = a.squad(); for (const s of f.squads) if (s.kind === 'plaza' && s !== q) s.huntCd = 1e9; q.huntCd = 0; q.hunt = null; q.state = 'muster'; q.x = q.home; q.n = q.max = n; a.D().foes.length = 0; a.D().fx.length = 0; a.park(q.home + (q.home < f.x ? 120 : -120), f.y - 760); a.step(30); const p = a.stand(a.me(), q.home + (q.home < f.x ? -300 : 300)); a.step(5); return a.until(() => { const F = a.foe(); return F && F.st === 'ready'; }); },
 };
 `;
 
@@ -129,48 +132,71 @@ try {
   await host.ev('(async()=>{ const m = await import("/config.js"); m.config.AWAY.DUEL.FOE.TELL = 3.2; return 1 })()'); // (a slow telegraph, so a still picture catches the ring half closed and the phone's cue is still on)
   const phoneLine = async () => console.log('  phone: ' + (await phone.ev('document.getElementById("info").textContent')) + ' | left: ' + (await phone.ev('document.getElementById("atk").textContent')) + ' | second: ' + (await phone.ev('document.getElementById("jump").textContent')));
   // the whole TV, and a close-up of the fight (640 x 360 round the man, shifted up a little)
-  const take = async (name, settle = 6) => {
+  // (3D only: a big picture of the fight, the ship brought down to it and the zoom up, then put back)
+  const closeUp = async (name, zoom = 2.1) => {
+    if (view !== '3d') return;
+    await host.ev('(()=>{ const a = window.__a, p = a.me(), F = a.foe(), cx = F ? (p.x + F.x) / 2 : p.x; window.view3dDebug().view.S.look = { x: cx, y: p.y - 80 }; return 1 })()'); // (the camera looks at the fight: S.look)
+    await zoom3d(zoom);
+    await host.ev('window.__a.settle(70)');
+    await host.shot(`${prefix}_${name}_zoom.png`);
+    await zoom3d(0.8);
+    await host.ev('window.view3dDebug().view.S.look = null; window.__a.settle(40)');
+  };
+  const poseOf = () => host.ev('(()=>{ const V = window.view3dDebug().view, p = window.__a.me(), f = V.crew.figs.get(p.id); return f ? f.pose.mode + ' + JSON.stringify(' | ') + ' + (f.cfg.item || "none") + ' + JSON.stringify(' | ') + ' + (p.dlPose || "") : "no figure"; })()'); // (3D: the pose his figure holds)
+  const take = async (name, settle = 6, hold = null, zoom = true) => {
     await host.ev(`window.__a.settle(${settle})`);
-    await host.shot(`duel_${view}_${name}.png`);
+    if (hold != null) { await host.ev(`window.__a.holdSwing(${hold})`); await host.ev('window.__a.settle(12)'); if (view === '3d') console.log('  his pose while the swing is held: ' + (await poseOf())); }
+    await host.shot(`${prefix}_${name}.png`);
     const at = await host.ev('(()=>{ const p = window.__a.me(); return window.__a.screen(p.x, p.y - 60) })()');
-    if (at) await host.shotClip(`duel_${view}_${name}_close.png`, { x: Math.max(0, Math.min(1600 - 640, at.x - 320)), y: Math.max(0, Math.min(900 - 360, at.y - 180)), width: 640, height: 360 });
+    if (at) await host.shotClip(`${prefix}_${name}_close.png`, { x: Math.max(0, Math.min(1600 - 640, at.x - 320)), y: Math.max(0, Math.min(900 - 360, at.y - 180)), width: 640, height: 360 });
+    if (zoom) await closeUp(name, zoom === true ? 2.1 : zoom);
+    if (hold != null) await host.ev('window.__a.holdSwing(null)');
   };
   const quiet = () => phone.ev("document.getElementById('toast').style.display = 'none'; 1"); // (the notice's toast would cover the buttons)
 
   // 1. a soldier telegraphing: sword raised, the "!" and the closing ring
   check((await host.ev('window.__a.fight()')) >= 0, 'a squad notices Mia, the first soldier stands off her');
   check((await host.ev('window.__a.until(() => { const F = window.__a.foe(); return F && F.st === "tell" && F.t < 1.2 })')) >= 0, 'he raises his sword: the telegraph');
-  await take('telegraph');
+  await take('telegraph', 6, null, false);
   await sleep(300);
   await quiet();
   await phoneLine();
-  await phone.shot(`duel_${view}_phone_cue.png`); // (the amber frame, the ring, BLOCK pulsing)
+  await phone.shot(`${prefix}_phone_cue.png`); // (the amber frame, the ring, BLOCK pulsing)
   check(await phone.ev('document.body.classList.contains("duel") && document.getElementById("jump").textContent.includes("BLOCK") && document.getElementById("atk").textContent.includes("Swing")'), 'the phone: the second button says BLOCK, the left one Swing');
   check(await phone.ev('document.getElementById("jump").classList.contains("cue")'), 'the phone: the BLOCK button is pulsing (the cue)');
   // the NOW buzz: the second cue, gold
   await host.ev('window.__a.until(() => { const F = window.__a.foe(); return F && F.st === "tell" && F.t < 0.5 })');
   await sleep(300);
   await quiet();
-  await phone.shot(`duel_${view}_phone_now.png`);
+  await phone.shot(`${prefix}_phone_now.png`);
   check(await phone.ev('document.getElementById("jump").classList.contains("now")'), 'the phone: the second buzz turns BLOCK gold (a press now parries)');
+  await closeUp('telegraph'); // (3D: a big picture, after the phone's cues have been checked: they run on real time)
 
   // 2. the PARRY: a press within 0.3 s of the blow staggers him (stars)
   await host.ev('(()=>{ const a = window.__a; a.me().hearts = 3; a.until(() => a.foe() && a.foe().st === "tell" && a.foe().t < 0.28); a.me().jumpQ = true; a.until(() => a.foe() && a.foe().st === "stagger", 120); a.step(4); return 1 })()');
   check(await host.ev('(()=>{ const F = window.__a.foe(); return !!F && F.st === "stagger" && window.__a.D().stats.parries >= 1 })()'), 'the parry: the soldier is staggered');
-  await take('parry');
+  await take('parry', 6, null, false);
   await phoneLine();
-  await phone.shot(`duel_${view}_phone_parry.png`);
+  await phone.shot(`${prefix}_phone_parry.png`);
+  await closeUp('parry');
 
   // 3. a crewman swinging: the counter blow, a moment after it lands
-  await host.ev('(()=>{ const a = window.__a, p = a.me(), F = a.foe(); a.until(() => Math.abs(F.x - p.x) <= 115 || (p.jxs = p.jx = Math.sign(F.x - p.x), false), 60); p.jxs = p.jx = 0; a.until(() => p.on.dl.cd <= 0, 60); p.atkQ = true; a.step(11); return 1 })()');
+  await host.ev('(()=>{ const a = window.__a, p = a.me(), F = a.foe(); a.until(() => Math.abs(F.x - p.x) <= 115 || (p.jxs = p.jx = Math.sign(F.x - p.x), false), 60); p.jxs = p.jx = 0; a.until(() => p.on.dl.cd <= 0, 60); a.D().fx.length = 0; p.atkQ = true; a.step(11); return 1 })()');
   check(await host.ev('window.__a.D().stats.counters >= 1'), 'the swing: a counter hit on the staggered soldier');
   await host.ev('window.__a.frame()');
-  await take('swing', 0);
+  await take('swing', 0, 160, 3); // (his blow struck: the sword swung forward and down)
+  await host.ev('window.__a.holdSwing(60)'); await host.ev('window.__a.settle(12)'); if (view === '3d') console.log('  his pose wound up: ' + (await poseOf())); await closeUp('swing_wind', 3); await host.ev('window.__a.holdSwing(null)'); // (and the moment before: the sword raised)
 
   // 4. the third hit: the soldier is down
   await host.ev('(()=>{ const a = window.__a, p = a.me(), F = a.foe(); for (let k = 0; k < 4 && F.st !== "down"; k++) { a.until(() => p.on.dl.cd <= 0, 60); p.atkQ = true; a.step(11); } a.step(6); return 1 })()');
   check(await host.ev('window.__a.D().foes.some((F) => F.st === "down")'), 'the soldier is KO\'d: he lies down');
   await take('ko');
+
+  // 4b. BLOCK: the guard goes up (the arc in front of him, gold while a blow landing now would be a parry)
+  check((await host.ev('window.__a.fight(1)')) >= 0, 'a fresh fight for the guard');
+  await host.ev('(()=>{ const a = window.__a; a.me().hearts = 3; a.me().jumpQ = true; a.step(6); return 1 })()');
+  check(await host.ev('window.__a.me().on.dl.guard > 0'), 'BLOCK raises his guard');
+  await take('guard', 0);
 
   // 5. two crew flanking: Mia in front of a soldier, Bot1 behind him
   await host.ev('(async()=>{ const m = await import("/config.js"); m.config.AWAY.DUEL.FOE.TELL = 1.6; return 1 })()');
@@ -188,6 +214,26 @@ try {
   await host.ev('(()=>{ const a = window.__a; a.me().hearts = 1e6; a.until(() => a.D().foes.filter((F) => ["ready", "tell", "recover", "stagger"].includes(F.st)).length >= 3, 1200); a.until(() => a.D().foes.some((F) => F.st === "tell"), 300); return 1 })()');
   check(await host.ev('window.__a.D().foes.length >= 3'), 'three soldiers stand round her (' + (await host.ev('window.__a.D().foes.length')) + ')');
   await take('squad');
+  if (view === '3d') { // the 3D look: real 3D soldiers, one instanced mesh, within the draw-call budget (3 more calls: the men, the lines, the glows)
+    const m = JSON.parse(await host.ev(`(async()=>{ const V = window.view3dDebug().view, A = window.__a, rd = async () => { await A.frame(); await A.frame(); const s = V.stats(); return [s.calls, s.tris]; }; const cfg = (await import("/config.js")).config.DUEL3D; const on = await rd(), st = { ...V.duel.stats }, live = !!V.duel.live; cfg.ENABLED = false; const off = await rd(); cfg.ENABLED = true; await A.frame(); return JSON.stringify({ on, off, st, live }); })()`)); // (ENABLED false: the HUD's own shapes draw instead)
+    console.log('  3D duel: ' + JSON.stringify(m));
+    check(m.live && m.st.fighters >= 3, 'the 3D view draws the soldiers itself (' + m.st.fighters + ' instanced)');
+    check(await host.ev('!!window.view3dDebug().view.hud3d.duel()'), 'the HUD steps back: its 2D soldiers, guard arcs and blow stars are not drawn over the 3D ones (only the words stay)');
+    check(m.on[0] - m.off[0] <= 4, 'the sword fight costs at most 4 draw calls more than none (' + (m.on[0] - m.off[0]) + '; ' + m.on[0] + ' in all)');
+  }
+  // 7. a big brawl: five soldiers, three crew, plus a close look
+  await host.ev('(async()=>{ const m = await import("/config.js"); const D = m.config.AWAY.DUEL; D.SQUAD.MAX = 6; D.SQUAD.FIRST = 5; D.SQUAD.REINFORCE = 1; D.FOE.TELL = 0.9; return 1 })()');
+  await host.ev('(()=>{ const a = window.__a; for (const b of a.bots()) if (b.on && b.on.away) a.st().groundSys.rejoin(b, true, true); return 1 })()');
+  check((await host.ev('window.__a.fight(12)')) >= 0, 'a fresh fight against a big squad');
+  await host.ev('(()=>{ const a = window.__a, p = a.me(); p.hearts = 1e6; a.bots().slice(0, 2).forEach((b, i) => { a.stand(b, p.x + (i ? -90 : 90)); b.hearts = 1e6; b.face = i ? 1 : -1; b.trip = { t: 0, goal: b.x, ready: false, flared: false }; }); a.until(() => a.D().foes.filter((F) => ["ready", "tell", "recover", "stagger", "run"].includes(F.st)).length >= 5, 1500); a.step(40); return 1 })()');
+  check(await host.ev('window.__a.D().foes.length >= 4'), 'a brawl: ' + (await host.ev('window.__a.D().foes.length')) + ' soldiers and 3 crew');
+  await take('brawl');
+  if (view === '3d') {
+    const m = JSON.parse(await host.ev(`(async()=>{ const V = window.view3dDebug().view, A = window.__a, rd = async () => { await A.frame(); await A.frame(); const s = V.stats(); return [s.calls, s.tris]; }; const cfg = (await import("/config.js")).config.DUEL3D; const on = await rd(), st = { ...V.duel.stats }; cfg.ENABLED = false; const off = await rd(); cfg.ENABLED = true; await A.frame(); return JSON.stringify({ on, off, st }); })()`));
+    console.log('  3D brawl: ' + JSON.stringify(m));
+    check(m.on[0] - m.off[0] <= 4, 'the big brawl costs at most 4 draw calls more (' + (m.on[0] - m.off[0]) + '; ' + m.on[0] + ' in all, scenes stay within 150)');
+    check(m.on[0] <= 150, 'the scene is within 150 draw calls (' + m.on[0] + ')');
+  }
 
   const errs = [...host.errors, ...phone.errors, ...(await host.ev('window.gameErrors||[]') || [])];
   for (const e of errs.slice(0, 8)) console.log('  ' + e);
