@@ -2588,6 +2588,54 @@ export const config = {
     PHONE_MS: 2600, // the toast on each human phone when she appears
     PRI: 6, // the alarm priority of her headlines (ALARMS.PRI: setpiece and objective are 5, helm and structure 6): she is told, not queued out
   },
+  // PLAY OF THE MISSION, L7 (SHIPS_BOOK.md; replay.js, replayArt.js): while a stop is flown a cheap recorder keeps the last PRE seconds of the sky as small numbers (FPS frames a second: the ships' poses, the crew's
+  // places, the enemies, shots, the creature's segments); a moment that weighs MIN_WEIGHT or more starts a clip (PRE before it, POST after it). At the stop's end the clip of the stop's top moment (the Log's "play of
+  // the mission") is played on the scorecard as a hand-inked film in slow motion, with its caption, then the awards. View only: it reads the sim and never writes it. SPACE / CAST OFF skips it.
+  // On with the Book (BOOK_ON=1 in a Node tool); NO_L7=1 turns just this off. Off = the old scorecard, byte for byte.
+  REPLAY: {
+    ENABLED: typeof process === 'undefined' || (!!(process.env && process.env.BOOK_ON) && !process.env.NO_BOOK2 && !process.env.NO_L7),
+    FPS: 12, // frames recorded each second of flying (ships and crew are smoothed between frames when it plays)
+    PRE: 2.4, POST: 1.2, // seconds of film before the moment and after it
+    MIN_WEIGHT: 6, // a moment (config.LOG.WEIGHT) needs this weight to be filmed; the clip the scorecard plays is the stop's top moment, so a stop whose best is lighter has none
+    MAX_PENDING: 3, // clips still waiting for their last seconds at once (the lightest are dropped first)
+    MAX_BYTES: 600000, // the most the recorder holds (estimated: 8 bytes a number); the rolling buffer sheds its oldest frames, a clip that would not fit is dropped
+    CAPS: { SHIPS: 4, CREW: 20, FOES: 40, SHOTS: 48, FLASHES: 8, FIRES: 12, PARTS: 24, SEGS: 160, SLOTS: 8, PALETTE: 40 }, // most of each thing in one frame (SLOTS: different ships, PALETTE: different crewmen, in one stop)
+    SPEED: { LEAD: 0.9, KEY: 0.3, EASE: 0.9 }, // the film's speed: LEAD x normal, slowing to KEY x within EASE s either side of the moment (so 3.6 s of sky last about 5 s)
+    SKIP_LOW: true, // no film on the lowest quality tier (the perf governor's level 0)
+    // The camera of the film: it frames our ship, the thing she is fighting and the person who did it, eased over TAU s (a critically damped follower, no overshoot), pushing in PUSH x around the moment.
+    CAM: { PAD: 1.25, TAU: 0.55, ZOOM_MIN: 0.14, ZOOM_MAX: 0.62, PUSH: 0.16, PUSH_SECS: 1.2, KEEP_SHIP: 0.16, FOE_RANGE: 4200, FOE_PAD: 500 }, // (KEEP_SHIP: when the zoom cannot take everything in, our ship keeps this share of the window clear on each side)
+    // Drawing (replayArt.js, logical 1600 x 900: 22 px is 26 px on a 1080p TV). X Y W H = the film's window.
+    ART: { X: 130, Y: 172, W: 1340, H: 508, MIN_PX: 22, KEYS: 12, HINT: 'SPACE - skip the replay' },
+  },
+  // AWARDS v2, L7 (awards.js): at most MAX awards on a stop's scorecard, chosen from the stop's stats and moments, funny and readable. Each stat award needs MIN of its stat and scores count / TARGET (a good stop's
+  // count); the HERO (whoever made the play of the mission, if it weighs HERO.MIN_WEIGHT), BUTTERFINGERS (loads lost when knocked out) and FELL OVERBOARD (twice or more in one stop) are moments with their own score.
+  // The best score first; nobody wins more than PER_PERSON; each human's phone shows the award (PHONE_SECS).
+  AWARDS: {
+    ENABLED: typeof process === 'undefined' || (!!(process.env && process.env.BOOK_ON) && !process.env.NO_BOOK2 && !process.env.NO_L7),
+    MAX: 4, PER_PERSON: 2, PHONE_SECS: 7,
+    HERO: { MIN_WEIGHT: 6, SCORE: 2, TITLE: 'Hero', ICON: '\u{1F31F}', UNIT: 'made the play of the mission' },
+    BUTTER: { MIN: 2, SCORE: 0.9, PER: 0.3, TITLE: 'Butterfingers', ICON: '\u{1F932}', UNIT: 'loads dropped', LOADS: ['ammo', 'coal', 'sandbag', 'crate', 'chest', 'scrap'] },
+    OVERBOARD: { MIN: 2, SCORE: 1.1, PER: 0.3, TITLE: 'Fell Overboard Twice', MANY: 'Fell Overboard {n} Times', ICON: '\u{1F30A}', UNIT: 'trips over the side' },
+    STATS: { // stat key: title, icon, what it counts, the least that earns it, a good stop's count
+      kills: { title: 'Ace Gunner', icon: '\u{1F3AF}', unit: 'shot down', min: 3, target: 8 },
+      raiders: { title: 'Swashbuckler', icon: '\u{1F5E1}\u{FE0F}', unit: 'raiders beaten', min: 2, target: 4 },
+      holes: { title: 'Patch Master', icon: '\u{1F528}', unit: 'holes patched', min: 2, target: 5 },
+      fires: { title: 'Firefighter', icon: '\u{1F9EF}', unit: 'fires out', min: 2, target: 4 },
+      repairs: { title: 'Grease Monkey', icon: '\u{1F527}', unit: 'repairs', min: 2, target: 5 },
+      ammo: { title: 'Quartermaster', icon: '\u{1F4E6}', unit: 'ammo runs', min: 3, target: 6 },
+      coal: { title: 'Stoker of the Stop', icon: '\u{26AB}', unit: 'coal loads', min: 3, target: 6 },
+      revives: { title: 'Medic', icon: '\u{1F4AB}', unit: 'revives', min: 1, target: 2 },
+      defused: { title: 'Bomb Squad', icon: '\u{1F4A3}', unit: 'bombs defused', min: 1, target: 2 },
+      vent: { title: 'Steam Valve', icon: '\u{1F4A8}', unit: 'vents worked', min: 2, target: 5 },
+      demolished: { title: 'Bombardier', icon: '\u{1F4A5}', unit: 'buildings flattened', min: 2, target: 4 },
+      sabotage: { title: 'Saboteur', icon: '\u{1F9E8}', unit: 'gunships blown up', min: 1, target: 1 },
+      boarding: { title: 'Sky Pirate', icon: '\u{1FA9D}', unit: 'boardings', min: 1, target: 2 },
+      captures: { title: 'Prize Master', icon: '\u{1F3F4}', unit: 'ships taken', min: 1, target: 1 },
+      cannon: { title: 'Human Cannonball', icon: '\u{1F4A5}', unit: 'flights', min: 1, target: 2 },
+      thrown: { title: 'Sandbag Slinger', icon: '\u{1F392}', unit: 'loads thrown', min: 3, target: 6 },
+      stowed: { title: 'Hold Keeper', icon: '\u{1F9F0}', unit: 'loads stowed', min: 3, target: 6 },
+    },
+  },
   // PvP look (modules/host/pvp/pvpArt.js: the flag, the two-sided hull bars, the "!" over an enemy). Soft faded team colours, logbook style.
   PVP_ART: {
     RED: '#c4574d', RED_DARK: '#8f3a34', RED_PALE: '#e8b7ae', // team red: flag / bar / outline / light tint

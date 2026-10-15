@@ -46,6 +46,9 @@ import { createChristening } from './christen.js'; // (L2: the christening vote 
 import { createRoster } from './roster.js'; // (L3: the crew roster - a title for each returning phone, welcomed on the lobby and on the phone, roster.js)
 import { generateVoyage, expectedPower, stopById, stopName, lairOf, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave, dateKey } from './voyage.js';
 import { createNemesis } from './nemesis.js'; // (L4: the Nemesis, a named enemy captain the Ship's Book remembers)
+import { createReplay, createFilm, stepFilm, skipFilm } from './replay.js'; // (L7: PLAY OF THE MISSION, the stop's top moment replayed on the scorecard - view only)
+import { chooseAwards, awardText } from './awards.js'; // (L7: awards v2 - at most four, funny and readable)
+import { perfState } from './perf.js';
 
 // Best run, remembered by this browser (the TV). Never let storage problems break the game.
 function loadRecord() {
@@ -251,7 +254,8 @@ export function createSimulation() {
     const run = state.run, s = run && run.voyage ? curStop() : null;
     return s ? { no: stopNo(run, s), name: stopName(s), env: s.env } : null;
   };
-  const moments = createMoments({ world: state, stopInfo, helm: getHelm });
+  const replay = createReplay({ world: state }); // (L7: the rolling film of the sky; a heavy moment starts a clip - replay.js)
+  const moments = createMoments({ world: state, stopInfo, helm: getHelm, onMoment: replay.mark });
   const roster = createRoster({ state, emitUi: emitPlayerUi }); // (L3: SHIPS_BOOK.md, roster.js)
   W.moment = moments.moment;
   W.overboard = moments.overboard;
@@ -672,6 +676,7 @@ export function createSimulation() {
     state.runEnd = null;
     state.salvagePop = null;
     moments.restart(); // (a new voyage: the Ship's Book starts a fresh page)
+    replay.reset();
     roster.restart(); // (L3: the stations' clock starts again)
     logUsed.clear();
     logUsed.counts = {};
@@ -682,6 +687,7 @@ export function createSimulation() {
     return Object.values(state.players).filter((p) => !p.mate && p.connected !== false).length <= B.max ? B.small : B.big;
   };
   const nemesis = createNemesis({ state, persist: () => saveVoyageSave(state.save), dateKey, addSalvage: (...a) => addSalvage(...a), phoneFx: (...a) => phoneFx(...a), hullNow: () => hullOrStructure(state.ship), stopNameOf: (id) => { const s = id && state.run ? stopById(state.run.voyage, id) : null; return s ? stopName(s) : ''; } }); // (L4: nemesis.js - dormant unless config.NEMESIS.ENABLED)
+  let lastFilm = null; // L7: the clip closeStop took for the scorecard stopDone is about to raise
   const logUsed = new Set(); // the sentences the Log has told this run (logWriter.js never tells one twice)
   // A stop is over (done, limped home from, or lost): its moments are written into the Log (run.log) and the dock / scorecard / postcard read them from there. Call it BEFORE the stop's stats are banked.
   const closeStop = (end) => {
@@ -693,6 +699,11 @@ export function createSimulation() {
     moments.close();
     const s = curStop();
     const entry = { ...writeStop(list, info, { used: logUsed, players, ship: state.shipName }), end, env: s.env, icon: envInfo(s.env).icon, lair: !!s.lair, creature: s.creature || null, flagship: !!s.flagship, count: list.length, colors: Object.fromEntries(players.filter((p) => p.name).map((p) => [p.name, p.color])) }; // (colors: each crewman's colour, so the TV can pick his name out in it)
+    if (config.AWARDS.ENABLED || config.REPLAY.ENABLED) { // (L7: the stop's top moment is the play of the mission; its clip, if it was filmed, is kept for the scorecard)
+      const top = moments.best(list);
+      entry.playWeight = top ? top.weight : 0;
+      lastFilm = config.REPLAY.ENABLED ? replay.take(top ? top.n : 0) : null;
+    }
     run.log.push(entry);
     run.lastLog = entry;
     return entry;
@@ -1434,9 +1445,14 @@ export function createSimulation() {
     const stop = curStop();
     W.ground.payTreasure(); // (CASTLE.md A2: the chests stowed in the hold, and any in a man's arms aboard, are paid - a row on the scorecard)
     addSalvage(SV.MISSION + stop.reward, 'mission');
-    const rows = awardRows(Object.values(state.players).filter((p) => !p.mate), true);
+    const crewNow = Object.values(state.players).filter((p) => !p.mate);
+    const v2 = config.AWARDS.ENABLED; // (L7: awards v2 picks at most four, and tells the phones itself)
+    let rows = v2 ? [] : awardRows(crewNow, true);
+    const extras = v2 ? { drops: moments.takeTally('drops'), falls: fallsOf(moments.open()) } : null; // (the stop's own tallies, taken before closeStop forgets them)
     nemesis.endStop(); // (L4: her visit, if she came, is closed for the Log)
+    lastFilm = null;
     const entry = closeStop('done'); // (the Ship's Book: the stop's moments become its Log line and its play of the mission, before the stats are banked)
+    if (v2) rows = chooseAwards({ players: crewNow, falls: extras.falls, drops: extras.drops, play: entry && entry.play ? { crew: entry.playCrew, weight: entry.playWeight } : null });
     const gentle = rows.length || !entry ? null : gentleLine(Object.values(state.players), entry.no); // (no award earned: a kind line naming whoever did the most, never "nobody did much")
     bankStats(true);
     state.scorecard = {
@@ -1447,13 +1463,35 @@ export function createSimulation() {
       play: entry && entry.play ? { text: entry.play, kind: entry.playKind, crew: entry.playCrew } : null, // (PLAY OF THE MISSION: "Mia planted the charge")
       gentle,
       log: entry ? entry.text : null,
+      film: lastFilm && !(config.REPLAY.SKIP_LOW && perfState.level <= 0) ? createFilm(lastFilm) : null, // (L7: the replay of the play of the mission plays first; SPACE skips it)
       t: SH.V2 ? config.VOTE.SCORECARD_TIME_V2 : config.VOTE.SCORECARD_TIME,
       gain: { ...run.gain },
       gained: Object.values(run.gain).reduce((a, b) => a + b, 0),
       total: run.salvage,
     };
     run.gain = {};
+    lastFilm = null;
+    if (v2 && !state.scorecard.film) sendAwards(state.scorecard); // (with a film the phones hear of their awards when it ends)
     pendingVote = stop.flagship ? 'victory' : 'dock';
+  };
+  // L7: the overboard falls of a list of moments, by name
+  const fallsOf = (list) => {
+    const falls = {};
+    for (const m of list) if (m.kind === 'overboard' || m.kind === 'overboard-lunatic') for (const n of m.who) falls[n] = (falls[n] || 0) + 1;
+    return falls;
+  };
+  // L7: each human's phone shows the award it won (a card, and a buzz), once
+  const sendAwards = (sc) => {
+    if (!sc || sc.sent) return;
+    sc.sent = true;
+    for (const p of Object.values(state.players)) {
+      if (p.bot || p.mate) continue;
+      const mine = sc.rows.filter((r) => r.name === p.name); // (one card for the phone: the best award, and a word for the others)
+      if (!mine.length) continue;
+      const more = mine.slice(1).map((r) => r.title);
+      emitPlayerUi(p.id, { award: { icon: mine[0].icon, title: mine[0].title, text: awardText(mine[0]) + (more.length ? ` Also: ${more.join(' and ')}!` : ''), secs: config.AWARDS.PHONE_SECS } });
+      phoneFx(p, null, [60, 60, 60, 60, 120]);
+    }
   };
   W.ground.bind({
     release: (m) => stopDone(m), pay: (n) => { const run = state.run; if (run) run.salvage = Math.max(0, run.salvage - n); },
@@ -1510,6 +1548,9 @@ export function createSimulation() {
     // The lap scorecard pauses the action, then the upgrade vote starts.
     if (state.scorecard) {
       flushAll();
+      const film = state.scorecard.film;
+      if (film && !film.done) { stepFilm(film, dt); return; } // (L7: the replay plays first; the scorecard's clock starts when it ends)
+      if (film) sendAwards(state.scorecard);
       if ((state.scorecard.t -= dt) <= 0) {
         state.scorecard = null;
         state.newRecord = false;
@@ -1583,6 +1624,7 @@ export function createSimulation() {
       gunship.settle(dt);
       salvageWatch();
       moments.tick(dt); // (the Ship's Book's clock; data only)
+      replay.step(dt); // (L7: the rolling film, view only)
       W.flotsam.step(dt); // (SCRAP: the deaths of this step become bundles on little parachutes; hulks float)
       if (framesOn() && state.run) { for (const f of pendingOf(state)) frameCheck(f); stepFrames(state, dt); } // (G4: a frame's room is checked when the ship changes; a bundle nobody works on loses its progress)
     }
@@ -1691,6 +1733,7 @@ export function createSimulation() {
     startDock,
     startRoute,
     castOff: () => {
+      if (state.scorecard && state.scorecard.film && !state.scorecard.film.done) { skipFilm(state.scorecard.film); return; } // (L7: SPACE / CAST OFF skips the replay)
       if (state.phase !== 'lobby') return;
       if (match.on) { match.begin(); return; } // (Versus: CAST OFF starts the match - the shelf, then the rounds)
       if (christening.skip()) return; // (L2: CAST OFF again while the name vote or the ceremony shows skips it)
@@ -1717,6 +1760,7 @@ export function createSimulation() {
     air,
     restart: () => restartGame(),
     moments, // (the Ship's Book, moments.js: the tools read the ring and call stopEnd)
+    replay, // (L7: the recorder, replay.js: the tools read its stats)
     closeStop, // (...write the open moments into run.log now: tools/log-check.mjs)
     endRun, // (...end the run now, victory or not: the postcard)
     flushPresses: flushAll, // (the pause menu: presses made while paused must not fire on resume)

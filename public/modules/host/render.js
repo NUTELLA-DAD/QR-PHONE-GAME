@@ -40,6 +40,7 @@ import { BARRELS, drawBarrel, drawChute, drawMines, drawRam, SHELL_LOOK } from '
 import { drawFlameGun } from './flameArt.js'; // the flamethrower's pilot light, cone of fire and heat gauge
 import { createNemesisArt } from './nemesisArt.js'; // L4: the Nemesis's seal, her briefing card and the lobby's WANTED card
 import { createBookArt } from './bookArt.js'; // L2: the christening vote and ceremony, the name plate, the lobby's book card, the Ship's Book page
+import { createReplayArt } from './replayArt.js'; // L7: PLAY OF THE MISSION replayed in slow motion on the scorecard (replay.js records, this draws)
 import { createLogArt } from './logArt.js'; // L1: the Ship's Book on the TV (the sky-dock's Log line, PLAY OF THE MISSION, the run-end postcard)
 import { createYardArt } from './yardArt.js'; // S.6b: the Shipwright's Yard (the sky-dock blueprint, the A / B / C vote, BUILT, "NEW: ...")
 import { createPartPictures } from './partArt.js'; // the little part pictures of the build tray, on the Yard's cards
@@ -164,6 +165,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
   let yardArt = null; // (made at its first use: it needs wrapLines and dots, defined further down)
   let logArtMade = null;
   const logArt = () => (logArtMade = logArtMade || createLogArt({ ctx, book, crewAt: drawCrewAt })); // (the Ship's Book's drawing, logArt.js)
+  let replayArtMade = null;
+  const replayArt = () => (replayArtMade = replayArtMade || createReplayArt({ ctx, book, logArt: logArt() })); // (L7: the replay of the stop's top moment, replayArt.js)
   let bookArtMade = null;
   const bookArt = () => (bookArtMade = bookArtMade || createBookArt({ ctx, book, logArt: logArt(), dots })); // (L2: the christening and the book's pages, bookArt.js)
   let nemesisArtMade = null;
@@ -1923,6 +1926,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
   // Lap scorecard: who did the most of each job.
   const drawScorecard = () => {
     const sc = state.scorecard;
+    if (sc.film && !sc.film.done) { replayArt().draw(sc.film, { play: sc.play, shipName: state.shipName }); return; } // (L7: the replay plays first, then the awards)
     ctx.fillStyle = 'rgba(43,34,22,.7)';
     ctx.fillRect(-config.W, -config.H, config.W * 3, config.H * 3);
     book.paper(200, 110, 1200, 700, { r: 22 });
@@ -1951,7 +1955,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       const row = Math.floor(i / 2);
       const x = 260 + col * 560;
       const titled = config.BOOK.ENABLED && state.titles && state.titles[r.name]; // (L3: a human's headline title under the name)
-      const y = (sc.play ? 392 : 300) + row * (sc.play ? (titled ? 88 : 78) : 92);
+      const y = (sc.play ? 392 : 300) + row * (config.AWARDS.ENABLED ? 124 : sc.play ? (titled ? 88 : 78) : 92); // (L7: at most four awards, with room to read them)
       ctx.textAlign = 'left';
       ctx.font = '44px "Segoe UI Emoji", sans-serif';
       ctx.fillText(r.icon, x, y + 14);
@@ -1966,7 +1970,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
       ctx.fillText(r.name, x + 70, y + 34);
       ctx.fillStyle = '#5a4a3a';
       ctx.font = '400 22px ' + config.FONTS.TEXT;
-      ctx.fillText(`${r.value} ${r.unit}`, x + 80 + ctx.measureText(r.name).width + 40, y + 34);
+      const nx = x + 80 + ctx.measureText(r.name).width + 40;
+      ctx.fillText(r.value != null ? `${r.value} ${r.unit}` : r.unit, nx, y + 34, Math.max(120, x + 530 - nx)); // (L7: a moment award has no count: its words)
       if (titled) { ctx.fillStyle = LB.STAMP; ctx.font = '700 22px ' + config.FONTS.TEXT; ctx.fillText(titled, x + 70, y + 59, 460); } // (the Ship's Book's crew roster, L3)
       ctx.fillStyle = config.INK;
     });
@@ -3987,7 +3992,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     lap('hud');
-    if (has('arrows')) {
+    if (has('arrows') && !(world.scorecard && world.scorecard.film && !world.scorecard.film.done)) { // (L7: the edge arrows and SPOTTED marks stay off the replay page)
       // Lookout arrows are sized in screen points, so undo the extra pixel density of sharp screens.
       const pr = canvas.width / (canvas.clientWidth || canvas.width) || 1;
       ctx.setTransform(pr, 0, 0, pr, 0, 0);
