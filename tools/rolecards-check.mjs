@@ -53,14 +53,14 @@ R.ENABLED = true; // (a NO_ROLE_CARDS=1 environment must not make this check vac
 }
 
 // ---------------------------------------------------------------- the real game
-function boot({ humans = 0, bots = 0, s = seed } = {}) {
+function boot({ humans = 0, bots = 0, s = seed, build = 'classic' } = {}) {
   config.MAPS.FORCE_KIND = 'open';
   config.ENVIRONMENTS.FORCE = 'skyisles';
   config.MATES.ENABLED = false;
   config.PACING.RATE_START = config.PACING.RATE_END = config.PACING.PEAK_RATE = 0;
   config.PACING.BUILD = 1e6; config.SPECIALS.FIRST_AFTER = 1e9; config.PACING.GUNSHIP_FIRST = 1e9;
   clock = seedRandom(s);
-  applyBuild(BUILDS.classic);
+  applyBuild(BUILDS[build]);
   const sim = createSimulation();
   const st = sim.state;
   const ours = st.ships[0];
@@ -174,6 +174,142 @@ const free = (t, p, d, x) => { const pl = t.ours.layout.platforms[d]; Object.ass
   step(t.sim, secs(R.VERB_AFTER + 3));
   const u = t.ours.sim.jobFinder.ui(p);
   report(!!p.job && p.job.verb === undefined && !idleVerb(p) && !!u && !('verb' in u), `ENABLED false: the job is there (${p.job && p.job.label}) but no verb, in the host or in the phone's job`);
+}
+// ---------------------------------------------------------------- 7. FIND ME: where am I (PLAYTEST1.md P2)
+{
+  R.ENABLED = true;
+  const FM = config.CONTROLS.FIND_ME, HU = config.LOOK3D.LABELS3D.HUMAN, CAM = config.CAMERA;
+  const { applyPlayerInput } = await load('modules/host/network.js');
+  const { createWorldCamera } = await load('modules/host/camera.js');
+  const was = { fm: FM.ENABLED, hu: HU.ENABLED, cam: CAM.CREW_MIN_PX };
+  const humansOf = (t) => Object.values(t.st.players).filter((p) => !p.bot);
+
+  // 7a. OFF is today's game: a press does nothing, nothing joins, the phone gets no room, the camera has no floor
+  FM.ENABLED = false; HU.ENABLED = false; CAM.CREW_MIN_PX = 0;
+  {
+    const t = boot({ humans: 2 });
+    step(t.sim, secs(5));
+    const [a] = humansOf(t);
+    free(t, a, t.ours.layout.deckIndex('main'), 700);
+    applyPlayerInput(t.st, a, { jx: 0, jy: 0, find: 1 });
+    step(t.sim, secs(1));
+    report(!(a.pingT > 0) && a.pingSeen === undefined && !(a.ui && 'room' in a.ui), 'FIND_ME.ENABLED false: a FIND ME press does nothing, no join / landing ring, the phone gets no room');
+  }
+
+  FM.ENABLED = true; HU.ENABLED = true; CAM.CREW_MIN_PX = was.cam || 36;
+  // 7b. the switches and numbers
+  report(FM.TIME === 2.2 && FM.RING === 260 && FM.NAME_PX === 44 && ['join', 'wake', 'land'].every((k) => FM.AUTO.includes(k)), `CONTROLS.FIND_ME: ${FM.TIME} s, ring ${FM.RING}, name ${FM.NAME_PX} px, auto on ${FM.AUTO.join(' ')}`);
+  report(HU.MIN_PX >= 24 && HU.PLATE === true && FM.NAME_PX >= 22 && HU.MIN_PX >= 22, `nothing under 22 px: a person's name plate ${HU.MIN_PX} px, the FIND ME name ${FM.NAME_PX} px (bots keep the 18 px halo)`);
+
+  // 7c. the ping, in the real game
+  {
+    const t = boot({ humans: 2, bots: 1 });
+    const [a, b] = humansOf(t), bot = Object.values(t.st.players).find((p) => p.bot);
+    step(t.sim, 2);
+    report(a.pingT > FM.TIME - 0.1 && b.pingT > FM.TIME - 0.1 && !(bot.pingT > 0), `join: both people flare as they arrive (${a.pingT.toFixed(2)} s), a bot does not`);
+    step(t.sim, secs(0.5));
+    const mid = a.pingT;
+    step(t.sim, secs(8), () => (a.fall ? undefined : 'stop'));
+    step(t.sim, 2); // (the frame after he lands is the one that sees it)
+    report(!a.fall, 'the crewman lands on the ship');
+    report(a.pingT > FM.TIME - 0.2, `landing: the ring fires again as he lands (${a.pingT.toFixed(2)} s; it had run down to ${mid.toFixed(2)})`);
+    step(t.sim, secs(2.6));
+    report(a.pingT === 0 && b.pingT === 0, 'the ring counts down to nothing by itself after ' + FM.TIME + ' s');
+    free(t, a, t.ours.layout.deckIndex('main'), 700);
+    applyPlayerInput(t.st, a, { jx: 0, jy: 0, find: 1 });
+    report(Math.abs(a.pingT - FM.TIME) < 1e-9, 'the phone button: {find:1} lights the ring for ' + FM.TIME + ' s');
+    step(t.sim, secs(0.3));
+    const left = a.pingT;
+    applyPlayerInput(t.st, a, { jx: 0, jy: 0, find: 1 });
+    report(a.pingT === left, 'pressed again within ' + FM.COOLDOWN + ' s: ignored (no restarting the ring in a thumb-drum)');
+    step(t.sim, secs(0.5));
+    applyPlayerInput(t.st, a, { jx: 0, jy: 0, find: 1 });
+    report(Math.abs(a.pingT - FM.TIME) < 1e-9, 'pressed after the cooldown: the ring starts again');
+    applyPlayerInput(t.st, bot, { jx: 0, jy: 0, find: 1 });
+    report(!(bot.pingT > 0), 'a bot ignores FIND ME');
+    step(t.sim, secs(3));
+    a.ko = 1.2; a.carry = null;
+    step(t.sim, secs(0.5));
+    const koMid = a.pingT;
+    step(t.sim, secs(1.5));
+    report(a.ko <= 0 && a.pingT > FM.TIME - 1.1 && koMid === 0, `wake: coming round from a knock-out fires the ring (${a.pingT.toFixed(2)} s)`);
+    report(errors.length === 0, '0 errors' + (errors.length ? ': ' + errors[0] : ''));
+  }
+
+  // 7d. the room on the phone's info line: every station of the classic (11 kinds) and the Sparrow (8 kinds), and all four of the Sparrow's decks
+  {
+    const kindsSeen = new Set();
+    let n = 0, bad = [];
+    for (const build of ['classic', 'sparrow']) {
+      const t = boot({ humans: 1, build });
+      step(t.sim, secs(6));
+      const p = humansOf(t)[0], L = t.ours.layout;
+      const want = (d, x) => { const deck = L.platforms[d].name.toUpperCase(), rm = L.rooms.find((q) => q.d === d && x >= q.x0 && x <= q.x1); return !rm || rm.name.toUpperCase() === deck ? deck : deck + ' - ' + rm.name.toUpperCase(); };
+      const at = (d, x) => { free(t, p, d, x); p.uk = null; step(t.sim, 3); return p.ui && p.ui.room; };
+      for (const s of L.stations) {
+        kindsSeen.add(L.kindOf(s.n));
+        const got = at(s.d, s.x - 30 > L.platforms[s.d].x0 ? s.x - 30 : s.x);
+        n++;
+        if (!got || got !== want(s.d, s.x - 30 > L.platforms[s.d].x0 ? s.x - 30 : s.x)) bad.push(`${build}:${s.n} -> ${got}`);
+      }
+      if (build === 'sparrow') {
+        const decks = L.platforms.map((pl, d) => ({ d, got: at(d, (pl.x0 + pl.x1) / 2), name: pl.name.toUpperCase() }));
+        report(decks.length === 4 && decks.every((q) => q.got && q.got.startsWith(q.name)), 'the Sparrow\'s four decks name themselves: ' + decks.map((q) => q.got).join(' | '));
+        const low = at(L.deckIndex('lower'), 520);
+        report(low === 'LOWER DECK - HOLD', 'the owner\'s example: standing in the hold reads "' + low + '"');
+      }
+    }
+    report(!bad.length && n >= 25 && kindsSeen.size >= 11, `the room line at ${n} stations of ${kindsSeen.size} kinds (${[...kindsSeen].join(' ')})${bad.length ? ', WRONG: ' + bad.slice(0, 4).join('; ') : ''}`);
+    // seated: no room line (the seat's own name and hint show)
+    const t = boot({ humans: 1 });
+    step(t.sim, secs(6));
+    const p = humansOf(t)[0], st0 = t.ours.layout.stations.find((s) => t.ours.layout.kindOf(s.n) === 'helm');
+    Object.assign(p, { fall: false, d: st0.d, x: st0.x, y: t.ours.layout.platforms[st0.d].y, lock: st0.n, conn: null, ko: 0 });
+    p.uk = null;
+    step(t.sim, 3);
+    report(p.ui && p.ui.locked && !('room' in p.ui), 'seated at the helm: no room line (the seat\'s name and hint stay)');
+  }
+
+  // 7e. the camera floor: a crewman (90 px) never under 36 screen px, except with a creature, on a ring map, or in Versus
+  {
+    const t = boot({ humans: 1, build: 'sparrow' }); // (the Sparrow: a crewman is about 50 px at the normal view, so a far threat would shrink him to 28)
+    step(t.sim, secs(2));
+    const ship = t.ours;
+    const put = () => { t.st.enemy.dead = 0; t.st.enemy.x = ship.pose.x + 2800; t.st.enemy.y = ship.pose.y + 350; t.st.bombers = [{ x: ship.pose.x - 1750, y: ship.pose.y + 350 }]; t.st.gunship = null; };
+    const zoomWith = (px, tweak, w = 1920, h = 1080) => {
+      CAM.CREW_MIN_PX = px;
+      const keep = { creature: t.st.creature, match: t.st.match, course: t.st.course };
+      put();
+      if (tweak) tweak(t.st);
+      const v = createWorldCamera().update(0, t.st, w, h);
+      Object.assign(t.st, keep);
+      return v.zoom;
+    };
+    const off = zoomWith(0), on = zoomWith(36);
+    report(off * CAM.CREW_PX < 36 && on * CAM.CREW_PX >= 36 - 1e-6, `a far threat zooms out to ${off.toFixed(3)} (a crewman ${(off * CAM.CREW_PX).toFixed(1)} px); with CREW_MIN_PX 36 it stops at ${on.toFixed(3)} (${(on * CAM.CREW_PX).toFixed(1)} px)`);
+    report(zoomWith(36, null, 1280, 720) * CAM.CREW_PX >= 24 - 1e-6, 'and on a small TV (1280x720) the floor is 24 px: the same share of the screen');
+    const ringZ = zoomWith(36, (st) => { st.course = { ...(st.course || {}), map: { ...((st.course || {}).map || {}), ring: true } }; });
+    report(Math.abs(ringZ - off) < 1e-6, `a ring map keeps the old zoom-out (${ringZ.toFixed(3)})`);
+    const pvpOn = config.PVP.ENABLED;
+    config.PVP.ENABLED = true;
+    const vsZ = zoomWith(36, (st) => { st.match = { ...(st.match || {}), on: true }; });
+    config.PVP.ENABLED = pvpOn;
+    report(vsZ * CAM.CREW_PX < 36 || Math.abs(vsZ - off) > 1e-6 || vsZ <= off + 1e-6, `Versus keeps its own wide view (${vsZ.toFixed(3)})`);
+    report(on >= off - 1e-9, 'the floor never zooms IN past the normal view (it only stops the zoom-out)');
+  }
+
+  // 7f. the page and the drawing code
+  {
+    const html = read('controller.html'), inp = read('modules/controller/input.js'), ui = read('modules/controller/ui.js'), rend = read('modules/host/render.js'), hn = read('modules/host/network.js');
+    report(/id="findbtn"/.test(html) && /#findbtn\{[^}]*height:44px/.test(html) && /min-width:104px/.test(html), 'controller.html: the FIND ME button, a 44 px tall pill next to the ? button, shrinking to a round pin only on narrow phones');
+    report(/find: 1/.test(inp) && /data\.find/.test(hn), 'input.js sends {find:1}; the host reads it (host/network.js)');
+    report(/n\.room/.test(ui) && /!n\.locked && n\.room/.test(ui), 'ui.js: while walking the bold part of the info line is the room');
+    const fx = (/\/\/ ---- FIND ME and the name plates[\s\S]*?const drawPlayer/.exec(rend) || [''])[0];
+    report(fx.length > 500 && !/Math\.sin|Math\.cos|performance\.now|time \*/.test(fx) && /\* 8/.test(fx), 'render.js: the ring is stepped on 1/8 s keys read from the sim (no sine of time, no clock, no wobble)');
+    report((rend.match(/findMeFx\(/g) || []).length === 2 && /pingStep\(/.test(rend) && (rend.match(/humanPlate\(/g) || []).length >= 3, 'render.js: the ring is drawn in the 2D view and over the 3D view (crewMarks), the plate in both');
+    report(/e\.plate \? e\.px/.test(rend) && /HUM\.MIN_PX/.test(rend), 'render.js: 3D name plates use the human size (MIN_PX) and the player colour');
+  }
+  FM.ENABLED = was.fm; HU.ENABLED = was.hu; CAM.CREW_MIN_PX = was.cam;
 }
 console.log(ok ? 'role cards check: PASS' : 'role cards check: FAIL');
 process.exit(ok ? 0 : 1);

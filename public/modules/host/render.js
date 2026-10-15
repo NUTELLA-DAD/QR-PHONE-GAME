@@ -2828,6 +2828,61 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.setLineDash([]);
   };
 
+  // ---- FIND ME and the name plates (PLAYTEST1.md P2) --------------------------------------------------------------------------------------------------------------------------
+  // A person's name sits on a plate in their own colour with ink text, at least LABELS3D.HUMAN.MIN_PX screen px (bots keep the cream halo). FIND ME (a phone button; a join, a wake, a landing): an expanding
+  // ring in their colour and the name at CONTROLS.FIND_ME.NAME_PX for TIME seconds, on 8 fps keys (player.pingT counts down in the sim; the step is read from it - no sine of time, no wobble).
+  const FMC = config.CONTROLS.FIND_ME, LAB3 = (config.LOOK3D && config.LOOK3D.LABELS3D) || config.LABELS3D || {}, HUM = LAB3.HUMAN || {};
+  const pingStep = (p) => { // -1 = none, else 0.. the 1/8 s step of the ring
+    if (!FMC.ENABLED || !(p.pingT > 0) || p.bot || p.type || p.connected === false || !p.color) return -1;
+    return Math.min(Math.ceil(FMC.TIME * 8) - 1, Math.max(0, Math.floor((FMC.TIME - p.pingT) * 8 + 1e-6)));
+  };
+  const isHuman = (p) => !!(HUM.ENABLED && !p.bot && !p.type && !p.enemy && p.color);
+  const lumOf = (hex) => { const m = /^#?([0-9a-f]{6})$/i.exec(String(hex)); if (!m) return 1; const n = parseInt(m[1], 16); return (0.2126 * (n >> 16 & 255) + 0.7152 * (n >> 8 & 255) + 0.0722 * (n & 255)) / 255; };
+  let pingLate = null; // (the rings of this frame, drawn after everybody so nothing covers the name: a list while the crew is being drawn, else null)
+  const humanPlate = (text, x, y, px, color) => { // (the name on a plate in the player's colour; ink text, or cream on a dark colour)
+    ctx.save();
+    ctx.font = `700 ${px}px ${config.FONTS.TEXT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.lineJoin = 'round';
+    const w = ctx.measureText(text).width + px * 0.8, h = px * 1.3, x0 = x - w / 2, y0 = y - px * 0.95;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x0, y0, w, h, h * 0.3); else ctx.rect(x0, y0, w, h);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.lineWidth = Math.max(2, px * 0.1);
+    ctx.strokeStyle = config.INK;
+    ctx.stroke();
+    ctx.fillStyle = lumOf(color) < (HUM.DARK != null ? HUM.DARK : 0.3) ? (LAB3.COLOR || '#f2e8cb') : config.INK;
+    ctx.fillText(text, x, y);
+    ctx.restore();
+  };
+  // The ring round (cx, cy) and the big name at (nx, ny), in the current coordinates: u = one screen px in them, rad = the ring's full radius in them.
+  const findMeFx = (p, step, cx, cy, u, rad, nx, ny) => {
+    const N = Math.ceil(FMC.TIME * 8), f = (step + 1) / N;
+    ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.globalAlpha = 0.14;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rad * (0.1 + 0.9 * f), 0, Math.PI * 2);
+    ctx.fill();
+    for (const fr of [f, f - 0.22]) {
+      if (fr <= 0) continue;
+      ctx.globalAlpha = fr < 0.55 ? 1 : Math.max(0.2, 1 - (fr - 0.55) / 0.45);
+      ctx.beginPath();
+      ctx.arc(cx, cy, rad * (0.1 + 0.9 * fr), 0, Math.PI * 2);
+      ctx.lineWidth = 17 * u;
+      ctx.strokeStyle = config.INK;
+      ctx.stroke();
+      ctx.lineWidth = 10 * u;
+      ctx.strokeStyle = p.color;
+      ctx.stroke();
+    }
+    ctx.restore();
+    humanPlate(String(p.name || ''), nx, ny, FMC.NAME_PX * u, p.color);
+  };
+
   const drawPlayer = (player, time) => {
     const species = config.SPECIES[player.species] || config.SPECIES.bulldog;
     const bob = player.moving ? Math.sin(time * 16) * 3 : player.climb ? Math.sin(time * 10) * 3 : 0;
@@ -2885,10 +2940,16 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.lineWidth = 3;
     ctx.strokeStyle = '#fff';
     const nameY = art ? player.y - bob - hop + art.top - 10 : player.y - 96 * (player.scale || 1);
-    ctx.strokeText(player.name, player.x, nameY);
-    ctx.fillStyle = player.connected === false ? '#888' : config.INK;
-    ctx.fillText(player.name, player.x, nameY);
-    if (player.hearts != null && player.hearts < config.HEALTH.MAX && !(player.ko > 0) && !player.type && player.connected !== false) healthArt.pips(player.x, nameY - 26, player.hearts, config.HEALTH.MAX, time); // (crew health: hearts over a hurt crewman's head, not over a whole one)
+    const tf = (HUM.ENABLED || FMC.ENABLED) && ctx.getTransform ? ctx.getTransform() : null, sc2 = tf ? Math.hypot(tf.a, tf.b) || 1 : 1; // (PLAYTEST1 P2: screen px per world px, for the plate's and the ring's sizes)
+    const pStep = pingStep(player), plateOn = isHuman(player), platePx = plateOn ? Math.max(18, HUM.MIN_PX / sc2) : 18;
+    if (pStep >= 0) { const fx = () => findMeFx(player, pStep, player.x, player.y - 50 * (player.scale || 1), 1 / sc2, FMC.RING, player.x, nameY - 8 / sc2); if (pingLate) pingLate.push(fx); else fx(); }
+    else if (plateOn) humanPlate(String(player.name), player.x, nameY, platePx, player.connected === false ? '#888' : player.color);
+    else {
+      ctx.strokeText(player.name, player.x, nameY);
+      ctx.fillStyle = player.connected === false ? '#888' : config.INK;
+      ctx.fillText(player.name, player.x, nameY);
+    }
+    if (player.hearts != null && player.hearts < config.HEALTH.MAX && !(player.ko > 0) && !player.type && player.connected !== false) healthArt.pips(player.x, nameY - 26 - (plateOn ? platePx - 18 : 0), player.hearts, config.HEALTH.MAX, time); // (crew health: hearts over a hurt crewman's head, not over a whole one)
     if (player.windup > 0) {
       // Raider winding up to strike: big pulsing "!".
       const pulse = 1 + Math.sin(time * 30) * 0.15;
@@ -3349,7 +3410,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     // WP15: NAME LABELS DO NOT PILE UP. The names are queued (nameQ) while the ships are drawn and laid out together afterwards (placeNames): a label that would lie on another one steps up by one line
     // (up to three lines), with a thin leader line down to its crewman; a fourth would be unreadable, so it joins the nearest label as "Bot4 +1". `blocks` are the rectangles of the other call-outs (KO!, "!",
     // "Hey!") that a name must not cover. The order is fixed (people before bots, then by id), so a label keeps its line while the others walk about.
-    const nameQ = [], blocks = [];
+    const nameQ = [], blocks = [], pingQ = []; // (pingQ: the FIND ME rings, drawn last so no verb or plate covers the name)
     const crewNames = (p, key, ps) => {
       const a = p3.crew(key);
       if (!a) return;
@@ -3359,7 +3420,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
       if (!q) return;
       at(q, ps);
       const na = p.name ? nameAlpha(p, String(key)) : 0;
-      if (p.name && na > 0) nameQ.push({ text: String(p.name), x: q.x, y: q.y, ps, color: p.connected === false ? '#888' : config.INK, rank: (p.bot || p.type ? 1 : 0), key: String(key), n: 0, alpha: na });
+      const human = isHuman(p), pinging = pingStep(p) >= 0; // (PLAYTEST1 P2: a person's name is a plate in their colour, MIN_PX or bigger; while FIND ME shows, the big name replaces it)
+      if (p.name && na > 0 && !pinging) nameQ.push({ text: String(p.name), x: q.x, y: q.y, ps, color: p.connected === false ? '#888' : human ? p.color : config.INK, plate: human, px: human ? HUM.MIN_PX : 18, rank: (p.bot || p.type ? 1 : 0), key: String(key), n: 0, alpha: na });
       let up = -24;
       if (p.ko > 0) { // KO! and the revive bar over the name
         label('KO!', 0, up, '20px ' + config.FONTS.DISPLAY, '#a8443f', '#fff', 3);
@@ -3377,10 +3439,10 @@ export function createRenderer({ ctx, state: world, canvas }) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.font = '700 18px ' + config.FONTS.TEXT;
       const placed = [];
-      const rectOf = (e, dy) => { const w = (ctx.measureText(e.text + (e.n ? ` +${e.n}` : '')).width + 6) * e.ps; return { x0: e.x - w / 2, x1: e.x + w / 2, y0: e.y + dy - 17 * e.ps, y1: e.y + dy + 5 * e.ps }; };
+      const rectOf = (e, dy) => { const px = e.px || 18; ctx.font = `700 ${px}px ${config.FONTS.TEXT}`; const w = (ctx.measureText(e.text + (e.n ? ` +${e.n}` : '')).width + (e.plate ? px * 0.8 : 6)) * e.ps; return { x0: e.x - w / 2, x1: e.x + w / 2, y0: e.y + dy - (e.plate ? px * 0.98 : 17) * e.ps, y1: e.y + dy + (e.plate ? px * 0.38 : 5) * e.ps }; };
       const hit = (r, s) => r.x0 < s.x1 && r.x1 > s.x0 && r.y0 < s.y1 && r.y1 > s.y0;
       for (const e of nameQ) {
-        const line = 20 * e.ps;
+        const line = (e.plate ? e.px + 6 : 20) * e.ps;
         let dy = 0, tries = 0, host = null;
         for (;;) {
           const r = rectOf(e, dy);
@@ -3404,7 +3466,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
           ctx.strokeStyle = config.INK; ctx.lineWidth = 1.4; ctx.stroke();
         }
         at({ x: e.x, y: e.y + dy }, e.ps);
-        label(e.n ? `${e.text} +${e.n}` : e.text, 0, 0, '700 18px ' + config.FONTS.TEXT, e.color, CREAM, 3);
+        if (e.plate) humanPlate(e.n ? `${e.text} +${e.n}` : e.text, 0, 0, e.px, e.color);
+        else label(e.n ? `${e.text} +${e.n}` : e.text, 0, 0, '700 18px ' + config.FONTS.TEXT, e.color, CREAM, 3);
         ctx.globalAlpha = 1;
       }
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -3413,6 +3476,14 @@ export function createRenderer({ ctx, state: world, canvas }) {
       if (!p.color || p.connected === false || p.enemy) return;
       const a = p3.crew(key);
       if (!a) return;
+      const pStep = pingStep(p);
+      if (pStep >= 0) { // FIND ME (PLAYTEST1 P2): the ring on the figure and the name at NAME_PX, through the 3D camera, on the HUD
+        const c = proj([a.x, a.y + 55 * (a.sc || 1), a.z]), t = proj([a.x, a.y + (a.ko ? 66 : 128) * (a.sc || 1) + (a.up || 0) + 40, a.z]);
+        if (c && t) {
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          pingQ.push(() => { ctx.setTransform(1, 0, 0, 1, 0, 0); findMeFx(p, pStep, c.x, c.y, Math.max(1, H / 1080), FMC.RING * zw, t.x, t.y - 20 * Math.max(1, H / 1080)); });
+        }
+      }
       const q = proj([a.x, a.y + (a.ko ? 66 : 128) * (a.sc || 1) + (a.up || 0), a.z]);
       if (!q) return;
       at(q);
@@ -3662,6 +3733,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
         }
       } catch (e) { /* (a nicety: never stop the frame) */ }
       placeNames(); // (WP15: every name queued above, laid out together so none lies on another)
+      for (const fx of pingQ) fx(); // (PLAYTEST1 P2: FIND ME, on top of every name and verb)
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
       // enemy bombers' health bars, a stolen plane's KICK THE PILOT bar, and the ring and "!" over a bat that has latched on
       for (const p of world.bombers || []) {
         const q = Number.isFinite(p.x) && Number.isFinite(p.y) && proj([p.x, -p.y + 95, 0]);
@@ -3861,6 +3934,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
             ctx.stroke();
           }
         }
+        pingLate = [];
         [...Object.values(state.players).filter((p) => !p.hj && !p.fly && !(p.lock && (state.escorts || []).some((e) => e.name === p.lock && e.flying))), ...state.boarders].sort((a, b) => a.y - b.y).forEach((player) => {
           // Crew aboard a gunship are stored in HER frame: draw them where she is.
           if (player.onGunship && state.gunship) {
@@ -3870,6 +3944,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
             ctx.restore();
           } else drawPlayer(player, time / 1000);
         });
+        for (const fx of pingLate) fx(); // (FIND ME: on top of the whole crew)
+        pingLate = null;
         art.link.drawWires(time / 1000); // loader <-> gunner and lookout <-> helm wires, the boiler's SURGE ring
         if (ship.main && yardArt) yardArt.drawNew(time / 1000); // "NEW: ENGINE POD" over the part just built at the sky-dock
         // Each crew member's colour marker above their head, easy to spot from the sofa.

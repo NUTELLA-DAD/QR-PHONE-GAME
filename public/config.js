@@ -7,6 +7,8 @@ const GUNS_ON = typeof process === 'undefined' || !(process.env && process.env.N
 const ALARMS_ON = typeof process === 'undefined' || !(process.env && process.env.NO_ALARMS);
 // F10 (FUN.md): role cards - the join card and the ? button on the phone, the verb over an idle crewman's head on the TV. ON in the game; NO_ROLE_CARDS=1 in a tool is the old game (the seeded baselines and the frames pin it).
 const ROLE_CARDS_ON = typeof process === 'undefined' || !(process.env && process.env.NO_ROLE_CARDS);
+// PLAYTEST1.md P2 (FIND ME: where am I): the FIND ME button and ring, the player-colour name plate, the crewman size floor in the camera, the room on the phone's info line. View and phone only (the sim is untouched). ON in the game (a browser has no process); a Node tool keeps it OFF (today's game) unless WITH_FIND_ME=1.
+const FIND_ME_ON = typeof process === 'undefined' || !!(process.env && process.env.WITH_FIND_ME);
 // F3 (FUN.md): a helm for one thumb - the stick's up/down is the pump and the vent, the speed lever is the cruise, the pressure lever a readout, the trim part of the autopilot, the SPLIT engine panel only with CONTROLS.EXPERT. ON in the game (a browser has no process); NO_HELM_V2=1 in a tool is the old helm (the seeded baselines pin it).
 const HELM_V2_ON = typeof process === 'undefined' || !(process.env && process.env.NO_HELM_V2);
 // F12 (FUN.md): small ships crack castles - a ship with no bomb bay (the Sparrow) has her guns' magazines filled every time a castle shutter opens, and her gunners keep their shells for the window (RING.FAIR). ON in the game; NO_RINGFAIR=1 in a tool is the old game (the seeded baselines pin it).
@@ -39,6 +41,7 @@ export const config = {
     SHIP_SCREEN_FRACTION: 0.4, SHIP_SCREEN_HEIGHT_FRACTION: 0.62, // the ship (incl. its long gasbag) takes at most this much of the screen width, and this much of its height (owner, 2026-10-11: zoomed out from 0.53 / full height - it felt tight on the airship)
     ENEMY_MARGIN: 260, // empty sky kept around the enemy plane (world pixels)
     MAX_ZOOM_OUT: 1.8, // never zoom out more than this beyond the normal view
+    CREW_MIN_PX: FIND_ME_ON ? 36 : 0, CREW_PX: 90, // PLAYTEST1 P2: a crewman (CREW_PX world px tall) is never drawn under CREW_MIN_PX screen px (at 1080p, scaled with the screen): the zoom-out stops there, whatever the threats. Not with a giant creature, on a ring map or in Versus. 0 = off
     CREATURE: { MAX_ZOOM_OUT: 2.4, DRAKE_MAX_ZOOM_OUT: 3.4, TITAN_MAX_ZOOM_OUT: 4.4, WYRM_MAX_ZOOM_OUT: 4.4, MOTHER_MAX_ZOOM_OUT: 3.6, EEL_MAX_ZOOM_OUT: 5, MARGIN: 200 }, // while a giant creature is alive the cap is this (BOSSES.md 3.2; the Cinder Drake flies about the ship in loops 8000 px across: DRAKE_MAX_ZOOM_OUT; the Island Titan stands 5000 px tall below her: TITAN_MAX_ZOOM_OUT; the Rime Wyrm's body reaches 7000 px out of its cliff: WYRM_MAX_ZOOM_OUT), and its living parts are kept in view with this much margin (world pixels)
     SMOOTHING: 1.6, // how quickly the camera pans to catch up (higher = snappier)
     ZOOM_SMOOTHING: 0.6, // how quickly it zooms (low = calm, no pumping)
@@ -3647,7 +3650,8 @@ export const config = {
       MAT: { ALPHA: 0.34, ALPHA_ON: 0.78, MIX_ON: 0.42, RX: 74, RZ: 56, RIM: 2.1, COLORS: { weapon: '#e0584a', engine: '#f08c30', nav: '#5aa6de', supply: '#e8bc3e', other: '#b58cd8' } },
     },
     CREW3D: { D0: 1700, D1: 3300, HEAD: 1.25, CONE: 1.6 },
-    LABELS3D: { HOLD: 3, FADE: 0.75, JOIN: 5, COLOR: '#f2e8cb', SCALE: 0.88 },
+    LABELS3D: { HOLD: 3, FADE: 0.75, JOIN: 5, COLOR: '#f2e8cb', SCALE: 0.88,
+      HUMAN: { ENABLED: FIND_ME_ON, MIN_PX: 24, PLATE: true, DARK: 0.3 } }, // PLAYTEST1 P2: a person's name is MIN_PX or bigger (screen px at 1080p) on a plate in their own colour with ink text (cream text on a colour darker than DARK); bots keep the cream halo
     // WP12 WEATHER (view3d/weather.js, weatherFall.js, weatherShip.js, weatherWorld.js; 3D.md section 16). The sim decides WHAT happens (state.weather.storm / gust, state.env.wind / blizzard / heat / smoke / gale, state.icing,
     // state.stormJob, state.sea, state.spores, state.clogs); these numbers decide how it LOOKS. An environment overrides one effect by key in its own block: LOOK3D.<env>.wx = { RAIN: { ALPHA: 0.4 } }.
     //   DENSITY: how much of the falling layer's instances are used by tier (rain / snow / embers / motes). BOX: the falling box's size against what the screen shows. Z: depth range of the falling things (behind .. in front of the ship plane).
@@ -3914,6 +3918,8 @@ export const config = {
   },
   // Phone controls (Phase C): the big ACTION button uses what you hold; the small GRAB button takes, swaps and hops on stations.
   CONTROLS: { PHONE_BUZZ: false, // the owner's playtest (2026-10-15): no phone buzzing at all
+    // PLAYTEST1 P2: the FIND ME button on the phone (and, on AUTO, a join / wake / landing) flares a ring in the player's colour (RING world px wide) and the name at NAME_PX screen px on the TV for TIME seconds, on 8 fps keys, in 2D and over 3D. COOLDOWN = seconds before another press counts. ROOM = the phone's info line names the room while walking.
+    FIND_ME: { ENABLED: FIND_ME_ON, TIME: 2.2, RING: 260, NAME_PX: 44, COOLDOWN: 0.6, AUTO: ['join', 'wake', 'land'], ROOM: true },
     GRAB_LOCK: 0.6, // seconds after any pickup / put-back / swap / station take when the host ignores more grab presses from that player (job actions are exempt)
     GRAB_HOLD: 0.35, // seconds GRAB must be held to swap, put back or replace what is in your hands (taking with empty hands is instant)
     HYSTERESIS: 15, // px: the rack / station you were already near keeps the button until another is this much closer (no flickering labels)

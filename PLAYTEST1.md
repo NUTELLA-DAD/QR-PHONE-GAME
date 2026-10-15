@@ -200,6 +200,7 @@ Use `BUILDS` with `buildLayout`, plus `placeFrame` / `finishFrame` / `growPart`,
   - botsim, golden and frames byte-identical; log and book green.
 
 ### P2. FIND ME: where am I (S/M)
+- **Status (2026-10-15): BUILT** on branch `worktree-agent-a1728c8536538e727`, not merged. Switches: `CONTROLS.FIND_ME.ENABLED`, `LABELS3D.HUMAN.ENABLED` (config.LOOK3D) and `CAMERA.CREW_MIN_PX` (0 = off); all ON in a browser, OFF in Node tools unless `WITH_FIND_ME=1`, so botsim / golden / frames stay byte-identical. The ring is drawn last (over every name and verb) in 2D and over 3D. The floor is scaled to the screen height (36 px at 1080p); the classic is already under 36 px at its normal view, so the floor never zooms IN past the normal framing. Gates green: `--check-role-cards` (section 7), `rolecards-shots` (`find_me_*.png`), `--check-3d`, `--check-alarms`, `--check-botsim`, `--check-frames`, `--lint`.
 - **Files:**
   - `controller.html` (a FIND ME button by `#hintbtn`), `controller/input.js` (`{find:1}`), `controller/ui.js:53 infoLine`;
   - `shipSim.js` input (`player.pingT`) and ui emit (`ui.room`);

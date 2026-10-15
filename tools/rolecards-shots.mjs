@@ -92,7 +92,7 @@ async function run(view, first) {
     await sleep(400);
     const card = await phone.ev('document.getElementById("rctitle").textContent + " | " + document.getElementById("rctext").textContent');
     console.log('  join card: ' + card);
-    check(/You're crew/.test(card) && /GOLD ARROW/.test(card), 'the card says "You\'re crew!" and "Follow the GOLD ARROW"');
+    check(/You're crew|You are a|Welcome back/.test(card) && /GOLD ARROW/.test(card), 'the card welcomes the player ("You\'re crew!" or, since the Ship\'s Book L3, "You are a <rank>!") and says "Follow the GOLD ARROW"');
     if (first) await phone.shot('roles_phone_join_card.png');
     await phone.tap('#rcard');
     await sleep(200);
@@ -138,6 +138,33 @@ async function run(view, first) {
     await host.ev('game.state.alarmClear && game.state.alarmClear(); 1');
     await sleep(600);
     await host.shot(`roles_${view}_tv_verbs.png`);
+
+    // ---- FIND ME (PLAYTEST1.md P2): the name plates in the players' colours, the phone's room line and button, the ring and the big name on the TV
+    {
+      const pilot = ids[0];
+      await host.ev('(()=>{ const s = game.state; for (const b of Object.values(s.players)) if (b.bot) b.pingT = 0; return 1; })()');
+      await sleep(500);
+      await host.shot(`find_me_${view}_tv_plates.png`);
+      const fb = await phone.ev('(()=>{ const r = document.getElementById("findbtn").getBoundingClientRect(); return [r.width, r.height, getComputedStyle(document.getElementById("findbtn")).display, document.getElementById("findbtn").textContent]; })()');
+      check(fb[0] >= 40 && fb[1] >= 44 && fb[2] !== 'none', 'the FIND ME button is thumb-sized: ' + Math.round(fb[0]) + 'x' + Math.round(fb[1]) + ' px ("' + fb[3] + '")');
+      const info = await phone.ev('document.getElementById("info").textContent');
+      console.log('  info line: ' + info);
+      check(/DECK|CROW|BRIDGE|ROOM|HOLD|WORKSHOP/.test(info), 'the info line names the room while walking: ' + info);
+      if (first) await phone.shot('find_me_phone.png');
+      await host.ev(`game.state.players[${JSON.stringify(pilot)}].pingT = 0; 1`);
+      await phone.tap('#findbtn');
+      check(await host.waitFor(`game.state.players[${JSON.stringify(pilot)}].pingT > 1`, 5000), 'pressing FIND ME on the phone starts the ring on the TV');
+      // hold the ring at one step (1.3 s left = step 7 of 18; later 0.7 s = step 12) by setting it every few ms, so the picture is the same every run
+      await host.ev(`(()=>{ window.__hold = setInterval(() => { game.state.players[${JSON.stringify(pilot)}].pingT = 1.3; }, 5); return 1; })()`);
+      await sleep(900);
+      await host.shot(`find_me_${view}_tv_ring.png`);
+      await host.ev(`(()=>{ clearInterval(window.__hold); window.__hold = setInterval(() => { game.state.players[${JSON.stringify(pilot)}].pingT = 0.7; }, 5); return 1; })()`);
+      await sleep(500);
+      await host.shot(`find_me_${view}_tv_ring_late.png`);
+      await host.ev('(()=>{ clearInterval(window.__hold); return 1; })()');
+      await sleep(2800);
+      check(await host.ev(`!(game.state.players[${JSON.stringify(pilot)}].pingT > 0)`), 'the ring ends by itself after 2.2 s');
+    }
 
     // ---- the ? button: free with a job
     check(await phone.waitFor('!!document.querySelector("#job.show")', 8000) || true, 'the phone has its gold arrow');

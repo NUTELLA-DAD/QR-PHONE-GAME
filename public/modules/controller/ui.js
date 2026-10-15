@@ -3,6 +3,8 @@ import { config } from '../../config.js';
 import { helpFor } from './help.js';
 const PHONE_BUZZ = !!(config.CONTROLS && config.CONTROLS.PHONE_BUZZ); // (the owner's playtest: phones never buzz unless this is switched on)
 
+const FM = config.CONTROLS.FIND_ME; // (PLAYTEST1 P2: the FIND ME button and the room on the info line)
+
 export function createControllerUI({ network }) {
   const $ = (id) => document.getElementById(id);
   const speciesNames = [['bulldog', '🐶'], ['wolf', '🐺'], ['tiger', '🐯'], ['shiba', '🐕'], ['fox', '🦊'], ['bear', '🐻'], ['cat', '🐱'], ['rabbit', '🐰']];
@@ -50,7 +52,7 @@ export function createControllerUI({ network }) {
       helmSeatAt ||= performance.now();
       if (performance.now() - helmSeatAt < 12000) return `<b>${n.station || 'Helm'}</b> - ${SEAT_HINTS.helmV2}`;
     } else helmSeatAt = 0;
-    const where = n.station || 'Walking';
+    const where = !n.locked && n.room && FM.ENABLED ? n.room : n.station || 'Walking'; // (PLAYTEST1 P2: while walking the bold part is the room: "LOWER DECK - HOLD")
     const ammo = n.ammo != null ? ` - ${n.ammo} ${n.kind === 'bombbay' ? 'bombs' : 'shells'}` : '';
     const sore = n.hp != null && n.hp > 0 && n.hp <= (n.jat ?? 1); // (crew health: on the last heart)
     const warn = n.status ? n.status : sore ? (n.med ? 'GET TO THE MEDBAY!' : 'Hurt! A crewmate can bandage you') : '';
@@ -442,6 +444,7 @@ export function createControllerUI({ network }) {
       join();
     };
     $('leave').onclick = () => network.sendInput({ jx: 0, jy: 0, leave: 1 });
+    $('findbtn').style.display = FM.ENABLED ? '' : 'none'; // (PLAYTEST1 P2: FIND ME)
     $('hintbtn').style.display = RC.ENABLED ? '' : 'none'; // (F10: the ? button - re-shows the hint for the seat or the job)
     $('hintbtn').addEventListener('pointerdown', (e) => {
       e.preventDefault();
