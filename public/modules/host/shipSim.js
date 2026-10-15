@@ -7,6 +7,7 @@
 // `state.X` here IS `world.X`. The world's systems are made after this ship's, so they are asked for when used (W.course ...); a ship that is not the main one has no
 // gunship (she hunts ship 0 only until B.5: the stand-in below) but runs the sky's hazards on her own copy of the environment rules (B.3: state.env, icing, spores ... are hers).
 import { createJobFinder } from './jobs.js';
+import { ladderEnd } from './nav.js'; // (P4: the ladders that catch a person)
 import { damageMul, crewMul, autopilotOn } from './crewscale.js';
 import { config } from '../../config.js';
 import { updateBot } from './bots.js';
@@ -122,7 +123,7 @@ export function createShipSim(world, ship, W) {
   const layout = ship.layout;
   const { one, all, kindOf, hasKind, nestTier, reviveSpot } = layout; // (the station-kind helpers, bound to it)
   const { puff, phoneFx, stat, credit, emitPlayerUi } = W;
-  const { moveWalker, steerTo, fall, detach, platformBelow } = ship.nav; // (walkers use THEIR ship's navigation)
+  const { moveWalker, steerTo, fall, detach, platformBelow, board } = ship.nav; // (walkers use THEIR ship's navigation)
   const gunship = ship.main || ship.ai ? late(() => W.gunship) : NO_GUNSHIP; // (B.5: the enemy gunship's own ship asks the director too: swinging back, the charge, the helm)
   const dmgMul = () => (ship.ai ? ship.ai.damageMul() : damageMul(state)); // (the gunship's hull is tuned by her own multiplier, not by the difficulty button and her crew's size)
   let ownEnv = null; // (another ship's own copy of the sky's hazards, made below; ship 0's is the world's, made in simulation.js)
@@ -159,6 +160,7 @@ export function createShipSim(world, ship, W) {
 
   const T = config.TOOLS;
   const CTL = config.CONTROLS; // phone controls: grab lockout, hold-to-swap, hysteresis (Phase C)
+  const LAD = config.NAV.LADDER; // PLAYTEST1.md P4: ladders that catch you (people only; config.NAV.LADDER.BOTS lets the bots use the same rules in a test)
   const GV2 = CTL.GRAB_V2; // PLAYTEST1.md P3: the button says what is in front of you (people only: every use of it below is guarded on !player.bot)
   const modules = createModules(ship);
   const jobFinder = createJobFinder(state);
@@ -374,6 +376,16 @@ export function createShipSim(world, ship, W) {
     const bias = GV2.ENABLED ? GV2.STATION_BIAS : 0;
     const best = sticky(player, 'grabKey', out, (o) => Math.abs(o.x - player.x) - (o.st ? bias : 0), (o) => o.key, GV2.ENABLED ? (o) => (o.st ? GV2.HYSTERESIS : CTL.HYSTERESIS) : CTL.HYSTERESIS);
     return best ? best.act : null;
+  };
+
+  // P4: within LADDER.GRAB_HUMAN px of a ladder's end (the bottom to go up, the top to go down) the big button says CLIMB when it has nothing better to do (pressing it takes hold, like the magnet does).
+  const climbOffer = (player) => {
+    if (!LAD.ENABLED || !LAD.HINT || player.lock || player.conn != null || player.fall || player.air || player.swing || isHostile(player) || player.d == null) return null;
+    const up = ladderEnd(layout.connectors, player.d, player.x, true, LAD.GRAB_HUMAN), down = ladderEnd(layout.connectors, player.d, player.x, false, LAD.GRAB_HUMAN);
+    const e = up && (!down || Math.abs(up.dx) <= Math.abs(down.dx)) ? up : down;
+    if (!e) return null;
+    const isUp = e === up, pole = layout.connectors[e.i].type === 'pole';
+    return { type: 'climb', obj: { id: 'L' + e.i + (isUp ? 'u' : 'd'), i: e.i, up: isUp }, label: pole ? 'SLIDE DOWN' : isUp ? 'CLIMB UP' : 'CLIMB DOWN' };
   };
 
   // Nearest of list (smaller distOf wins), but the one remembered in player[field] keeps it until another is CTL.HYSTERESIS closer.
@@ -1171,6 +1183,9 @@ export function createShipSim(world, ship, W) {
       air.jumpChute(player);
       stat(player, 'jumps');
       phoneFx(player, 'Jumping! Steer with the stick - the chute opens in a moment', [60, 40, 60]);
+    } else if (type === 'climb') {
+      const e = ladderEnd(layout.connectors, player.d, player.x, act.obj.up, LAD.GRAB_HUMAN + 20); // (the ladder is still there, and he is still near it)
+      if (e && e.i === act.obj.i && player.conn == null) board(player, e.i, act.obj.up);
     } else if (type === 'ladder') {
       if (W.ground.useLadder(ship, player)) phoneFx(player, 'Down the rope ladder! Stick down to climb, UP to climb back.', [40, 30, 40]);
     } else if (type === 'hook') {
@@ -1581,7 +1596,7 @@ export function createShipSim(world, ship, W) {
         } else if (player.onGunship) {
           gunship.walk(player, player.jx || 0, player.jy || 0, dt, M.WALK_SPEED * env.deep.walkMul(player)); // aboard a gunship she carries them
         } else {
-          moveWalker(player, player.jx || 0, player.jy || 0, dt, M.WALK_SPEED * env.deep.walkMul(player) * wadeMul(player), player.conn != null && !player.bot && Math.abs(player.jy || 0) > 0.9 ? config.AIR.CLIMB_FAST : 1);
+          moveWalker(player, player.jx || 0, player.jy || 0, dt, M.WALK_SPEED * env.deep.walkMul(player) * wadeMul(player), player.conn != null && !player.bot && Math.abs(player.jy || 0) > 0.9 ? config.AIR.CLIMB_FAST : 1, !player.bot || LAD.BOTS);
           air.edgeCheck(player, dt, false); // walking off the end of an outside deck
         }
         if (!player.fly && !player.onGunship) air.standing(player, dt);
@@ -1594,6 +1609,7 @@ export function createShipSim(world, ship, W) {
           if ((!act || act.type === 'need') && !player.carry && grabAct) act = grabAct;
           // P3: a station is on the big button even with a tool in hand, and ahead of a vent or valve beside it.
           else if (GV2.ENABLED && grabAct && grabAct.type === 'station' && (!act || act.type === 'need' || act.type === 'vent' || act.type === 'valve') && (!player.carry || GV2.TOOL_TAKES_SEAT)) act = grabAct;
+          if (!act) act = climbOffer(player); // P4: nothing else to do here: CLIMB, when a ladder is within reach
           trackAid(player, 'a', act);
           trackAid(player, 'g', grabAct);
         }
@@ -1782,13 +1798,14 @@ export function createShipSim(world, ship, W) {
       if (awayUi && awayUi.status) status = awayUi.status;
       if (awayUi && awayUi.u.duel) attackLabel = 'Swing'; // (CASTLE.md A4: in a sword fight the left button swings, the other one blocks)
       const room = FIND_ME.ENABLED && FIND_ME.ROOM && !player.bot && !player.lock && !player.hj && !player.fly && player.conn == null && !player.on && player.d != null ? roomLine(player.d, player.x) : ''; // (PLAYTEST1 P2: while walking, the phone's info line names the deck and room: LOWER DECK - HOLD)
-      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, st ? st.s + '/' + st.l + '/' + st.w + '/' + st.f : '', primePct, loadPct, jobUi ? jobUi.label + '|' + jobUi.dir : '', aid, gaid, grabNow ? grabNow.label + grabNow.swap : '', glock, progNow, ship.pose.f, state.turning.t > 0 ? 1 : 0, hp, player.team ? player.team + (state.match && state.match.phase === 'lobby' ? 's' : '') : '', eng ? JSON.stringify(eng) : '', alarm, awayUi ? awayUi.k : '', room].join('|');
+      const climbHint = !player.bot && LAD.ENABLED && LAD.HINT && !player.lock && !player.hj ? (player.act && player.act.type === 'climb' ? (player.act.obj.up ? 'up' : 'down') : player.conn != null && layout.connectors[player.conn] && layout.connectors[player.conn].type !== 'pole' ? (player.s <= 0 || player.s >= 1 ? 'off' : 'on') : '') : ''; // (P4: the phone's hint: "Push UP to climb", or at the end of a ladder "push sideways to step off")
+      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, st ? st.s + '/' + st.l + '/' + st.w + '/' + st.f : '', primePct, loadPct, jobUi ? jobUi.label + '|' + jobUi.dir : '', aid, gaid, grabNow ? grabNow.label + grabNow.swap : '', glock, progNow, ship.pose.f, state.turning.t > 0 ? 1 : 0, hp, player.team ? player.team + (state.match && state.match.phase === 'lobby' ? 's' : '') : '', eng ? JSON.stringify(eng) : '', alarm, awayUi ? awayUi.k : '', room, climbHint].join('|');
       const hv = config.CONTROLS.HELM_V2 && player.lock && kind === 'helm' && !player.hj && !player.bot ? helmGauge() : null; // (F3: the phone's gas gauge, [gas, the hover mark] in whole numbers: the pressure lever is only a readout now)
       const keyF = hv ? key + '|' + hv : key;
       if (keyF !== player.uk) {
         player.uk = keyF;
         if (!player.bot) {
-          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, st, prime: primePct, load: loadPct, job: jobUi, aid, grab: grabNow ? grabNow.label : null, gaid, gswap: !!(grabNow && grabNow.swap), glock, prog: progNow, hp, hpMax: config.HEALTH.MAX, jat: config.HEALTH.JOB_AT, med: !!health.medbay(), fc: ship.pose.f, tn: state.turning.t > 0, eng, alarm, ...(room ? { room } : {}), tm: player.team ? { id: player.team, name: teamOf(player.team).name, color: teamOf(player.team).color, swap: !!(state.match && state.match.on && state.match.phase === 'lobby') } : null }; // (tm: Versus - the side the phone is on, and whether it may still swap)
+          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, st, prime: primePct, load: loadPct, job: jobUi, aid, grab: grabNow ? grabNow.label : null, gaid, gswap: !!(grabNow && grabNow.swap), glock, prog: progNow, hp, hpMax: config.HEALTH.MAX, jat: config.HEALTH.JOB_AT, med: !!health.medbay(), fc: ship.pose.f, tn: state.turning.t > 0, eng, alarm, ...(room ? { room } : {}), ...(climbHint ? { climb: climbHint } : {}), tm: player.team ? { id: player.team, name: teamOf(player.team).name, color: teamOf(player.team).color, swap: !!(state.match && state.match.on && state.match.phase === 'lobby') } : null }; // (tm: Versus - the side the phone is on, and whether it may still swap)
           if (hv) player.ui.hv = hv;
           if (awayUi) { player.ui.away = awayUi.u; player.ui.station = 'AWAY TEAM'; }
           emitPlayerUi(player.id, player.ui);
