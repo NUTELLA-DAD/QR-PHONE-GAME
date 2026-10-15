@@ -359,7 +359,7 @@ export function createControllerUI({ network }) {
     $('act').classList.toggle('loading', fill >= 0);
     $('act').style.setProperty('--p', (fill >= 0 ? fill * 10 : 0) + '%');
     // GRAB: the small amber button (take / swap / put back / hop on a seat). Not on a station, not when knocked out.
-    const grab = !next.locked && next.grab ? next.grab : null;
+    const grab = !next.locked && next.grab && next.grab !== label ? next.grab : null; // (PLAYTEST1.md P3: the big button already says the same thing - "Take Helm" with a hammer in hand - so the small one stays out of the way)
     $('grab').style.display = grab ? '' : 'none';
     if (grab) {
       setButton('grab', iconFor(grab), grab.replace('extinguisher', 'fire ext.')); // (the small button has no room for the long word)

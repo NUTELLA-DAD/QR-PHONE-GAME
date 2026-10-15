@@ -221,6 +221,7 @@ Use `BUILDS` with `buildLayout`, plus `placeFrame` / `finishFrame` / `growPart`,
   - `--check-3d` and `--check-alarms`.
 
 ### P3. The button says what's in front of you (M)
+**STATUS 2026-10-15: BUILT (worktree branch, not merged).** `CONTROLS.GRAB_V2` (NO_GRAB_V2=1 = the old game); `BUILDS.sparrow` decluttered, `BUILDS.sparrow_v1` is the old one. Deviations from the text: the main hammer is at 330, not 300 (300 is 60 px from the Boiler); the vent moved to main 840 and the two main pipe valves to 470 / 540 so the sword has its own stretch of deck; the boiler is no seat (it was never lockable: SURGE / coal stay on the big button). The tool taken to a seat goes back on its rack (racks are endless); a bundle or sandbag is set down as a load. `--check-grab` (`tools/grab-check.mjs`, reusable: `boot / person / sweep / idOf`, P4 adds sections at the bottom) and `tools/grab-shots.mjs` (`grab_*.png`). `--check-yard` now pins NO_GRAB_V2 (its sail "ONE legal place" is the old Sparrow's).
 - **Files:**
   - `shipSim.js:327-352 grabsFor`, `355-366 sticky`, `1556-1564` (the merge), `266-272` (racks, vents and valves order for humans);
   - `config.js:3916-3929 CONTROLS`;
