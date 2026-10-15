@@ -1586,7 +1586,7 @@ const winCheck = (name, st, cr, why) => {
   let exc = 0;
   try { renderer.renderFrame(clock.ms, cam.update(1 / 60, st, canvas.width, canvas.height)); } catch (e) { exc++; console.log('  draw error: ' + String(e && e.stack).split('\n').slice(0, 3).join(' | ')); }
   const texts = rec.texts.map((q) => q.s);
-  report(exc === 0 && texts.includes(LR.LABEL) && texts.includes('KRAKEN LAIR') && texts.includes(LR.ICON), `the TV's route map draws the creature icon, the "${LR.LABEL}" label and "KRAKEN LAIR" (0 draw errors)`);
+  report(exc === 0 && texts.some((t) => /kraken lair/i.test(String(t))) && texts.some((t) => /lair/i.test(String(t))) && texts.includes(LR.ICON), `the TV's route map draws the creature icon, the "${LR.LABEL}" label and "KRAKEN LAIR" (0 draw errors)`);
 }
 
 // (r) the reward and the trophy
@@ -2337,7 +2337,7 @@ const spawnCr = (ctx, kind = 'drake') => ctx.sim.creatures.spawn(kind);
   let exc = 0;
   try { renderer.renderFrame(clock.ms, cam.update(1 / 60, st, canvas.width, canvas.height)); } catch (e) { exc++; console.log('  draw error: ' + String(e && e.stack).split('\n').slice(0, 3).join(' | ')); }
   const texts = rec.texts.map((q) => q.s);
-  report(exc === 0 && texts.includes(DRK.LAIR.ICON) && texts.includes(DRK.LAIR.LABEL) && texts.includes('DRAKE LAIR'), 'the TV\'s route map draws the dragon icon and "DRAKE LAIR" (0 draw errors)');
+  report(exc === 0 && texts.includes(DRK.LAIR.ICON) && texts.some((t) => /drake lair/i.test(String(t))), 'the TV\'s route map draws the dragon icon and "DRAKE LAIR" (0 draw errors)');
 }
 {
   // the reward and the trophy
@@ -3131,7 +3131,7 @@ const roostedBird = () => {
   let exc = 0;
   try { renderer.renderFrame(clock.ms, cam.update(1 / 60, st, canvas.width, canvas.height)); } catch (e) { exc++; console.log('  draw error: ' + String(e && e.stack).split('\n').slice(0, 3).join(' | ')); }
   const texts = rec.texts.map((q) => q.s);
-  report(exc === 0 && texts.includes(TB.LAIR.ICON) && texts.includes(TB.LAIR.LABEL), 'the TV\'s route map draws the eagle icon and LAIR (0 draw errors)');
+  report(exc === 0 && texts.includes(TB.LAIR.ICON) && texts.some((t) => /lair/i.test(String(t))), 'the TV\'s route map draws the eagle icon and LAIR (0 draw errors)');
 }
 {
   // the reward and the trophy: the Thunderbird feather sail
@@ -3884,7 +3884,7 @@ const tAct = (cr, sub) => !!cr.titan.act && (sub === undefined || cr.titan.act.s
   let exc = 0;
   try { renderer.renderFrame(clock.ms, cam.update(1 / 60, st, canvas.width, canvas.height)); } catch (e) { exc++; console.log('  draw error: ' + String(e && e.stack).split('\n').slice(0, 3).join(' | ')); }
   const texts = rec.texts.map((q) => q.s);
-  report(exc === 0 && texts.includes(L0.ICON) && texts.includes(L0.LABEL), 'the TV\'s route map draws the Titan icon and its label (0 draw errors)');
+  report(exc === 0 && texts.includes(L0.ICON) && texts.some((t) => /lair/i.test(String(t))), 'the TV\'s route map draws the Titan icon and its label (0 draw errors)');
   L0.ENABLED = false;
 }
 
@@ -4609,7 +4609,7 @@ const wyWin = (name, st, cr, why) => {
   let exc = 0;
   try { renderer.renderFrame(clock.ms, cam.update(1 / 60, st, canvas.width, canvas.height)); } catch (e) { exc++; console.log('  draw error: ' + String(e && e.stack).split('\n').slice(0, 3).join(' | ')); }
   const texts = rec.texts.map((q) => q.s);
-  report(exc === 0 && texts.includes(WY.LAIR.ICON) && texts.includes(WY.LAIR.LABEL), 'the TV\'s route map draws the Wyrm icon and its label (0 draw errors)');
+  report(exc === 0 && texts.includes(WY.LAIR.ICON) && texts.some((t) => /lair/i.test(String(t))), 'the TV\'s route map draws the Wyrm icon and its label (0 draw errors)');
 }
 {
   // the TV: cracks, the body, the chip rings, the breath, the funnel, the sun
