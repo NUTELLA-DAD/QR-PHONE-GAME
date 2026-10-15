@@ -151,6 +151,7 @@ if (args.runs > 1 && !args.child) {
 globalThis.window ??= globalThis;
 const store = new Map();
 globalThis.localStorage ??= { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
+if (process.env.NOT_FIRST_EVER) localStorage.setItem('airshipVoyage', JSON.stringify({ version: 3, totalRuns: 5 })); // (P1: this TV has flown before: the route is a varied one - a rolled opening, a Titan on some routes, the Drake and the Wyrm as light lairs; without it the first-ever route, as before)
 globalThis.requestAnimationFrame ??= (f) => setTimeout(f, 16);
 {
   let s = args.seed >>> 0;

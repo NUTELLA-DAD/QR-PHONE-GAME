@@ -114,6 +114,7 @@ function generateCurriculum(seed, opts = {}) {
   const mode = modeInfo(opts.mode);
   const table = curriculumTable(opts.mode);
   const second = (opts.voyageNo || 1) > 1;
+  const vary = opts.firstEver === false && config.CREATURES.TITAN.LAIR.VARY.ENABLED; // (P1: a TV that has flown before gets a rolled opening and light lairs; no firstEver (the tools, a direct call) = the tutorial route as ever)
   const bonus = second ? V.SECOND.DANGER_BONUS : 0;
   const h = second ? 1 : 0; // (the harbour column)
   const rand = mulberry(seed);
@@ -140,7 +141,7 @@ function generateCurriculum(seed, opts = {}) {
       for (let tries = 0; tries < 6 && usedEnv.has(env) && envIds.length > 1 && c >= h; tries++) env = envIds[ri(0, envIds.length - 1)]; // (different choices in a column)
       usedEnv.add(env);
       const danger = last || r === easyRow ? base : Math.min(maxD, base + (rand() < C.BRANCH_UP ? 1 : 0));
-      let kinds = e.kinds;
+      let kinds = vary && e.varyKinds ? e.varyKinds : e.kinds; // (P1: the first stop may be a narrow pass too)
       if (opts.classic && !second && c === h && C.CLASSIC_STOP1.ENABLED && C.CLASSIC_STOP1.KIND) kinds = [C.CLASSIC_STOP1.KIND]; // (F1: ...and a real map: an outpost raid, where the ground guns shoot back)
       if (opts.gentle && slot <= 1 && r === easyRow && kinds.includes('open')) kinds = kinds.filter((k) => k !== 'open'); // (gentle: a small ship with no bomb bay always has a way round an outpost raid in the first columns)
       let kind = kinds[ri(0, kinds.length - 1)];
@@ -172,8 +173,9 @@ function generateCurriculum(seed, opts = {}) {
     columns.push(col);
   }
   curriculumRings(columns, seed, table);
-  curriculumLairs(columns, seed, n, h, table);
-  titanLair(columns, seed, n, h, second);
+  if (vary) titanLair(columns, seed, n, h, second, true); // (P1: the Titan is placed first, so the light lairs keep clear of it)
+  curriculumLairs(columns, seed, n, h, table, vary);
+  if (!vary) titanLair(columns, seed, n, h, second, false);
   curriculumTags(columns, h);
   connectColumns(columns, rand, n);
   return { seed, columns, mode: opts.mode, voyageNo: opts.voyageNo || 1, curriculum: true };
@@ -213,29 +215,36 @@ export function markDefend(voyage, stop) {
 // Only a stop already in its creature's sky can hold one (Kraken in the sea, Drake in the Ember Forge, Thunderbird in the storm), never a ring stop, and a column always keeps a branch at or under its base skulls
 // (the lair is never its only easy way). Like markLairs this has a random stream of its own and changes nothing but the lair stop, so a route without lairs is the same route (tools/creature-check.mjs holds it to that).
 const lairHomes = (col) => col.filter((s) => config.CREATURES.LAIR.BY_ENV[s.env] && !s.ring && col.some((o) => o !== s && o.danger <= o.base));
-function curriculumLairs(columns, seed, n, h, table) {
+// P1: a slot with lair: 'light' holds a lighter lair (config.CREATURES.LAIR.LIGHT: the Drake in Ember, the Wyrm in Frost) in a route that varies (generateCurriculum), from LIGHT.FROM of the route; the Titan's column (placed first then) and its neighbours stay free.
+const lightHomes = (col) => lairHomes(col).filter((s) => config.CREATURES.LAIR.LIGHT.ENVS.includes(s.env));
+function curriculumLairs(columns, seed, n, h, table, vary = false) {
   const LR = config.CREATURES.LAIR;
   const rand = mulberry((seed ^ 0x6c616972) >>> 0);
   const count = n - h >= LR.LONG_STOPS ? LR.COUNT.long : LR.COUNT.short;
   const cols = [];
+  const taken = [];
+  if (vary) columns.forEach((col, c) => { if (col.some((s) => s.lair)) taken.push(c); });
   for (let c = h; c <= n - 2; c++) {
     const s = columns[c][0];
-    if (table[s.slot].lair && s.share >= CU().LAIR_FROM && lairHomes(columns[c]).length) cols.push(c);
+    const lair = table[s.slot].lair;
+    if (lair === true && s.share >= CU().LAIR_FROM && lairHomes(columns[c]).length) cols.push(c);
+    else if (vary && lair === 'light' && s.share >= LR.LIGHT.FROM && lightHomes(columns[c]).length) cols.push(c);
   }
   for (let i = cols.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [cols[i], cols[j]] = [cols[j], cols[i]]; } // (shuffled)
   const chosen = [];
   for (const c of cols) {
     if (chosen.length >= count) break;
-    if (chosen.every((x) => Math.abs(x - c) > 1)) chosen.push(c);
+    if (chosen.every((x) => Math.abs(x - c) > 1) && taken.every((x) => Math.abs(x - c) > 1)) chosen.push(c);
   }
   for (const c of chosen) {
-    const homes = lairHomes(columns[c]);
+    const light = table[columns[c][0].slot].lair === 'light';
+    const homes = light ? lightHomes(columns[c]) : lairHomes(columns[c]);
     const s = homes[Math.floor(rand() * homes.length)];
     s.lair = true;
     s.creature = LR.BY_ENV[s.env];
     s.kind = 'lair';
-    s.danger += LR.DANGER;
-    s.reward = Math.round(s.reward * LR.REWARD_MUL);
+    s.danger += light ? LR.LIGHT.DANGER : LR.DANGER;
+    s.reward = Math.round(s.reward * (light ? LR.LIGHT.REWARD_MUL : LR.REWARD_MUL));
     delete s.nemesis;
     delete s.multi;
   }
@@ -245,15 +254,23 @@ function curriculumLairs(columns, seed, n, h, table) {
 // first voyage), guaranteed, in a route of MIN_STOPS flown stops or more (a 4-stop QUICK route keeps its late lair). It is a lair like the others (kind 'lair', its own map, no zeppelin) but only bats and imps fly with it, +DANGER skulls
 // and x REWARD_MUL reward, and the column keeps a branch at or under its base skulls (a lair is never the only easy way). Its own random stream, so a route without it is the same route; no Titan next to another lair, and none
 // in the second voyage of a campaign (that starts deeper in the table, with no Sky Isles).
-function titanLair(columns, seed, n, h, second) {
+// P1: with vary (a TV that has flown before; TITAN.LAIR.VARY) the Titan comes and goes: VARY.CHANCE of the routes, at a rolled column of VARY.COLUMNS, always one branch among others (the column keeps an easy way round);
+// a Titan on a column past the first stands on a Sky Isles island among the Frost and Ember stops.
+function titanLair(columns, seed, n, h, second, vary = false) {
   const TL = config.CREATURES.TITAN.LAIR;
   if (!TL.ENABLED || second || n - h < TL.MIN_STOPS) return;
-  const c = h + TL.COLUMN, col = columns[c];
-  if (!col || c >= n - 1 || [c - 1, c + 1].some((x) => columns[x] && columns[x].some((s) => s.lair))) return;
   const rand = mulberry((seed ^ 0x7469746e) >>> 0);
-  const homes = col.filter((s) => s.env === 'skyisles' && !s.ring && !s.lair && !s.harbour && !s.flagship && col.some((o) => o !== s && o.danger <= o.base));
+  let at = TL.COLUMN;
+  if (vary) {
+    if (rand() >= TL.VARY.CHANCE) return;
+    at = TL.VARY.COLUMNS[Math.floor(rand() * TL.VARY.COLUMNS.length)];
+  }
+  const c = h + at, col = columns[c];
+  if (!col || c >= n - 1 || [c - 1, c + 1].some((x) => columns[x] && columns[x].some((s) => s.lair))) return;
+  const homes = col.filter((s) => (vary || s.env === 'skyisles') && !s.ring && !s.lair && !s.harbour && !s.flagship && col.some((o) => o !== s && o.danger <= o.base));
   if (!homes.length) return;
   const s = homes[Math.floor(rand() * homes.length)];
+  if (s.env !== 'skyisles') { s.env = 'skyisles'; s.play = 'skyisles'; }
   s.lair = true;
   s.creature = 'titan';
   s.kind = 'lair';

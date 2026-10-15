@@ -182,6 +182,7 @@ Use `BUILDS` with `buildLayout`, plus `placeFrame` / `finishFrame` / `growPart`,
 - Never run gates in parallel: the timing budgets flake.
 
 ### P1. The Titan stops repeating; skies and beasts vary (S)
+- **STATUS: DONE (2026-10-15, branch worktree-agent-a792af57bf3e17898).** `opts.firstEver` = `false` makes a route "varied"; no `firstEver` (the tools, a direct call) is today's route, so botsim / golden / frames stay byte-identical. The Titan: 37-38% of varied routes, column 1 or 2, never both; Drake or Wyrm on 64% of 7-8 stop routes; 50% open with a narrow pass. The daily route always varies (everyone must see the same map). Map: every stop shows name 20 px, kind 16 px, NEW tag 18 px, lair icons 44 px, legend "N skies, N beasts on this route" (config `VOYAGE.ROUTE_MAP`). Shots: `tools/routemap-shots.mjs`. `--check-curriculum` has a new (a2) section. For P5: `titanLair` / `curriculumLairs` take a `vary` argument; `generateCurriculum` computes `vary` from `opts.firstEver === false`.
 - **Files:**
   - `voyage.js:248-265 titanLair`, `111-180 generateCurriculum` (`opts.firstEver`, `opts.raft`), `215-242 curriculumLairs`;
   - `simulation.js:664 newRun` (pass `firstEver: !(save.totalRuns > 0)` and the start build);

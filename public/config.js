@@ -1043,10 +1043,10 @@ export const config = {
           { env: ['aether'], kinds: ['network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 3, ring: 'citadel' },
         ],
         voyage: [ // 8 stops (a 6 or 7 stop route takes the slots its columns' shares round to; the Evening Campaign uses this table too)
-          { env: ['skyisles'], kinds: ['network'], gates: ['swarm', 'imps'], danger: 1 }, // 1: a cave run, bats and imps only
+          { env: ['skyisles'], kinds: ['network'], gates: ['swarm', 'imps'], danger: 1, varyKinds: ['network', 'route'] }, // 1: a cave run, bats and imps only (P1: a TV that has flown before may get a narrow pass instead: varyKinds)
           { env: ['skyisles'], kinds: ['open', 'route'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 2 }, // 2: a raid or a pass; planes and the first gunship (F1: danger 1 -> 2)
-          { env: ['A'], kinds: ['open'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 2, ring: 'tower' }, // 3: a Frost or Ember raid, the tower
-          { env: ['A', 'sea'], kinds: ['open', 'route', 'network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 2 }, // 4: the heist / salvage / defend slot (G6; until then any kind)
+          { env: ['A'], kinds: ['open'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 2, ring: 'tower', lair: 'light' }, // 3: a Frost or Ember raid, the tower (P1: lair: 'light' = the Drake or the Wyrm may stand here on a varied route, config.CREATURES.LAIR.LIGHT)
+          { env: ['A', 'sea'], kinds: ['open', 'route', 'network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 2, lair: 'light' }, // 4: the heist / salvage / defend slot (G6; until then any kind) (P1: a light lair may stand here too, in Frost or Ember)
           { env: ['B'], kinds: ['open', 'route', 'network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 2, nemesis: true }, // 5: the dark skies; the Nemesis may appear (F1: danger 3 -> 2, so the curve is 1,2,2,2,2,3,3,3)
           { env: ['B'], kinds: ['open', 'route', 'network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 3, lair: true, ring: 'fortress' }, // 6: a lair or the fortress
           { env: ['B'], kinds: ['open', 'route', 'network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 3, lair: true, multi: true }, // 7: the multi-part slot (a lair may stand here too, for a short route that skipped slot 6)
@@ -1077,6 +1077,7 @@ export const config = {
       fungal: { name: 'Fungal Depths', icon: '🍄', color: '#8a6fb0', ready: true },
       aether: { name: 'The Aether', icon: '🌌', color: '#4b3f7a', ready: true },
     },
+    ROUTE_MAP: { NAME_PX: 20, KIND_PX: 16, TAG_PX: 18, LAIR_ICON_PX: 44, ROW_GAP: 160 }, // P1: the route map (render.js drawRouteMap) names every stop (NAME_PX) and its kind (KIND_PX); the NEW: tag, a lair's icon and the gap between a column's rows, in px
     KIND_NAMES: { network: 'Cave run', route: 'Narrow pass', open: 'Outpost raid', ring: 'Ring assault', lair: 'Kraken lair', salvage: 'Salvage run', defend: 'Defend the balloon' }, // (lair: a Sunken Sea stop with a giant creature, config.CREATURES.LAIR)
   },
   // Fires.
@@ -2866,6 +2867,7 @@ export const config = {
     // voyage (the long ones, LONG_STOPS columns or more, get the bigger number); never the first stop, never two in a row; +DANGER skulls and x REWARD_MUL reward.
     LAIR: {
       COUNT: { short: 1, long: 2 }, LONG_STOPS: 7, DANGER: 1, REWARD_MUL: 2,
+      LIGHT: { DANGER: 0, REWARD_MUL: 1.5, FROM: 0.25, ENVS: ['ember', 'frost'] }, // P1: a lighter lair (slot lair: 'light') on a varied route: no extra skulls, x1.5 reward, from this share of the route, only in these skies (the Drake, the Rime Wyrm); counts toward COUNT
       BY_ENV: { sea: 'kraken', ember: 'drake', storm: 'thunderbird', frost: 'wyrm', fungal: 'mother' }, // which creature lives in which sky (a lair stop is a Sunken Sea stop with a Kraken, an Ember Forge stop with a Drake, a Storm Front stop with a Thunderbird or a Frost Peaks stop with the Rime Wyrm: voyage.js markLairs)
       RUN: 16000, BEYOND: 9000, SEA_BELOW: 2000, // px from the launch to the lair's middle (where the route ends and she hovers); more map beyond it; the sea lies this far under the launch height
       SPIRES: [[-35, 3], [0, 2], [35, 4]], SPIRE_W: 2600, SPIRE_UP: [450, 900], // rock spires standing in the sea: [cells from the lair's middle (the one at 0 stands right under her when she hovers there), +- jitter in cells], their width at the sea line and how far they stand above it (px)
@@ -3076,7 +3078,8 @@ export const config = {
       REWARD: { HULL: 35, GAS: 30, TROPHY: null }, // salvage x3, the hull patched and every bag topped up; no trophy part card (yet)
       // The Titan's lair is an early Sky Isles stop: the SECOND stop flown of a voyage (the column after the first; COLUMN = how many columns after it, 1 = the next) when the route has MIN_STOPS stops or more, guaranteed, on one of that column's Sky Isles stops,
       // +DANGER skulls and x REWARD_MUL reward. The map (maps.js buildTitanLairMap): open sky, a flat plain FLOOR_BELOW px under the launch height (launch on row LAUNCH_ROW), nothing else.
-      LAIR: { ICON: '\u{1F5FF}', LABEL: 'TITAN', NAME: "The Island Titan's Lair", KIND: 'Titan lair', LAUNCH_ROW: 18, FLOOR_BELOW: 5800, DANGER: 0, REWARD_MUL: 1.5, COLUMN: 1, MIN_STOPS: 5, ENABLED: true },
+      LAIR: { ICON: '\u{1F5FF}', LABEL: 'TITAN', NAME: "The Island Titan's Lair", KIND: 'Titan lair', LAUNCH_ROW: 18, FLOOR_BELOW: 5800, DANGER: 0, REWARD_MUL: 1.5, COLUMN: 1, MIN_STOPS: 5, ENABLED: true,
+        VARY: { ENABLED: true, CHANCE: 0.4, COLUMNS: [1, 2] } }, // P1: COLUMN (always) is for a TV's FIRST-EVER voyage only; after that the Titan stands with CHANCE, at one of COLUMNS (flown stops after the first), as one branch among others. ENABLED false = the Titan always at COLUMN, no light lairs, no narrow-pass opening (today's game)
     },
     // ---- THE RIME WYRM (C.6d, BOSSES.md 2.4): the Frost Peaks' burrower, a serpent about 7000 px long that erupts out of an ice cliff. creatures/wyrm.js = the body, creatureWyrm.js = the fight. Its cycle: it lies BURIED (untouchable),
     // CRACKS appear on a cliff face (CRACK s: the telegraph, a banner, a buzz on every phone), it ERUPTS and COILS the hull (creatureGrip.js with the Wyrm's own numbers, COIL: it stops the ship) for up to COIL.TIME s, lets go, GAPES its
