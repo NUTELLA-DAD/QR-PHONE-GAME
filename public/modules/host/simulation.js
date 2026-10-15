@@ -1230,7 +1230,7 @@ export function createSimulation() {
     const cap = dockCards();
     if (state.run.raft) while (offers.length > cap) { // (P5: the raft's dock shows 4 cards - 5 for a crew of 10 or more: fittings go first, then a second stripped card, then the frame twin)
       const last = (test) => { for (let i = offers.length - 1; i >= 0; i--) if (test(offers[i], i)) return i; return -1; };
-      const k = [last((o) => o.kind === 'upgrade'), last((o, i) => o.named && i > offers.findIndex((x) => x.named)), last((o) => o.frame)].find((i) => i >= 0);
+      const k = [last((o) => o.kind === 'upgrade'), last((o, i) => o.named && i > offers.findIndex((x) => x.named)), last((o) => o.named), last((o) => o.frame)].find((i) => i >= 0); // (...a stripped card waits for the next dock; the frame twin is how a raft builds)
       if (k === undefined) break;
       offers.splice(k, 1);
     }

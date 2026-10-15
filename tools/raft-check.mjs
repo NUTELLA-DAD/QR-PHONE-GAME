@@ -131,13 +131,6 @@ const flat = (parts) => buildLayout(parts);
 }
 
 // ---------------------------------------------------------------- 2. cast off: the gift
-for (const crew of [1, 3, 8, 12]) {
-  const b = boot({ bots: 0 });
-  crowd(b.st, b.ours, crew);
-  const { sim, st, ours } = b;
-  // (the gift is handed over by CAST OFF: this scene casts off with nobody and then the crew arrive, so make a second ship that casts off WITH the crew)
-  void sim; void st; void ours;
-}
 {
   const want = (crew) => Math.min(config.SCRAP.HOLD_CAP, R.START_SCRAP.BASE + Math.floor(crew * R.START_SCRAP.PER_CREW));
   for (const crew of [1, 3, 8, 12]) {
@@ -238,7 +231,6 @@ for (const crew of [1, 3, 8, 12]) {
   report(sites.length === 3 && away > 0 && away <= 1500, `three wrecks; the first hangs ${Math.round(away)} px from the start (within 1500)`);
   report(c.goal && c.goal.need === R.YARD.NEED && c.goal.total === R.YARD.TIME && c.goal.yard, `the goal: strip ${c.goal && c.goal.need} parts before the storm in ${c.goal && c.goal.total} s`);
   report(c.stop && c.stop.rateMul === R.YARD.RATE_MUL && c.stop.gates.join() === 'swarm', `bats only, at ${c.stop && c.stop.rateMul} of the usual rate`);
-  report(/BUILD YOUR ENGINE AND GUN/.test(st.briefing ? JSON.stringify(st.briefing) : (st.say ? '' : '')) || true, 'the briefing says what the stop is for');
   const big = boot({ bots: 10, map: null });
   report(big.st.course.goal && big.st.course.goal.need === R.YARD.NEED_BIG, `a crew of 10: strip ${big.st.course.goal && big.st.course.goal.need} parts`);
   const duo = boot({ bots: 2, map: null });
@@ -262,13 +254,15 @@ for (const crew of [1, 3, 8, 12]) {
     ours.sim.impact(g.x, 600, config.STRUCTURE.BIG_POWER + 2);
     for (let i = 0; i < 30; i++) { step(sim, secs(1)); for (const q of S.segs()) if (q === g) q.hp = Math.min(q.hp, 0.0); }
     runs++;
-    splits += S.stats ? S.stats.splits || 0 : 0;
+    const ss = st.structStats || {};
+    splits += ss.splits || 0;
     ships += st.ships.length > 1 ? 1 : 0;
-    if (early) held += ours.layout.platforms.length === 1 && ours.layout.stations.some((q) => q.kind === 'helm') && ours.layout.stations.some((q) => q.kind === 'boiler') ? 1 : 0;
-    else broke += ours.layout.version > 1 ? 1 : 0;
+    if (early) held += (ss.holds || 0) > 0 && (ss.breakoffs || 0) === 0 && ours.layout.stations.some((q) => q.kind === 'helm') && ours.layout.stations.some((q) => q.kind === 'boiler') ? 1 : 0;
+    else broke += (ss.breakoffs || 0) > 0 ? 1 : 0;
   }
   report(runs === 20 && splits === 0 && ships === 0, `${runs} forced-failure runs: ${splits} splits, ${ships} extra ships (a one-deck raft has no critical middle)`);
-  report(held === 4, `stop 1 (NO_BREAK_BEFORE ${R.NO_BREAK_BEFORE}): the end that was shot to pieces held in ${held} of 4 runs (the helm and the boiler stay)`);
+  report(broke >= 6, `later stops: the end that is shot to pieces comes away in ${broke} of 16 runs (an ordinary break-off - the test is real)`);
+  report(held === 4, `stop 1 (NO_BREAK_BEFORE ${R.NO_BREAK_BEFORE}): the end that was shot to pieces held in ${held} of 4 runs (nothing broke off; the helm and the boiler stay)`);
 }
 
 // ---------------------------------------------------------------- 6. the cards

@@ -447,6 +447,15 @@ export function saveModePrefs(p) {
 // ---- Which ship a new voyage starts with (remembered on this TV): the Sparrow, or the classic full ship ----
 const SHIP_KEY = 'airshipShip';
 export const START_BUILDS = ['raft', 'sparrow', 'classic']; // (P5: 'raft' too; a saved 'raft' with RAFT.ENABLED false is the Sparrow: simulation.setStartBuild)
+// The Ship button's next press (network.js; PLAYTEST1.md P5): Auto -> Raft -> Sparrow -> Classic -> Auto. `build` is the ship now forced (ignored while `auto`); the answer is { build, auto }: auto = back to choosing by the crew size
+// (START_BUILD_BY_CREW), else the ship to force. With RAFT.ENABLED false the Raft is not in the round, as before.
+export function shipCycle(build, auto) {
+  const cycle = config.RAFT.ENABLED ? ['raft', 'sparrow', 'classic'] : ['sparrow', 'classic'];
+  if (auto) return { build: cycle[0], auto: false };
+  if (config.VOYAGE.START_BUILD_BY_CREW.ENABLED && build === 'classic') return { build: null, auto: true };
+  const i = cycle.indexOf(build);
+  return { build: i < 0 ? cycle[1] : cycle[(i + 1) % cycle.length], auto: false }; // (a playtest build goes to the first quick start)
+}
 export function loadStartBuild() {
   try {
     const v = localStorage.getItem(SHIP_KEY);

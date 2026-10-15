@@ -388,5 +388,30 @@ function watch(sim, st, secs) {
   CU.ENABLED = true;
   report(!b.st.run.voyage.curriculum && !b.st.vote.options.some((o) => o.salvage), 'with the curriculum off a weak crew is offered no salvage run (the old route)');
 }
+// ---- (a3) P5: a voyage that starts on the RAFT (opts.raft): the Breaker's Yard first, the kinder raft tables, no Titan ----
+{
+  const R = config.RAFT;
+  for (const mode of ['voyage', 'quick']) {
+    let yards = 0, titans = 0, early = 0, n = 0, tooFew = 0;
+    for (let s = 1; s <= 200; s++) {
+      const v = VG.generateVoyage(s * 6151, { mode, raft: true, gentle: true, firstEver: false });
+      n++;
+      const f = v.columns[0][0];
+      if (f.yard && f.salvage && f.kind === 'salvage' && f.danger === 1 && f.gates.join() === 'swarm') yards++;
+      if (v.columns.flat().some((q) => q.creature === 'titan')) titans++;
+      // the early stops are kinder: no gunship before the 3rd column, no bombers before the 2nd, no outpost raid or castle in the first three columns of a voyage-length route
+      if (mode === 'voyage') for (const q of v.columns.flat()) if ((q.col < 2 && (q.gates.includes('gunship') || q.gates.includes('bombers'))) || (q.col < 3 && (q.kind === 'open' || q.kind === 'ring' || q.gates.includes('gunship')))) early++;
+      if (v.columns.length < (mode === 'quick' ? 4 : 6)) tooFew++;
+    }
+    report(yards === n, `RAFT ${mode}: ${n} routes, stop 1 is always the Breaker's Yard (a salvage run on a field map, one skull, bats only)`);
+    report(titans === 0, `RAFT ${mode}: no Island Titan (${titans} of ${n})`);
+    if (mode === 'voyage') report(early === 0 && tooFew === 0, `RAFT voyage: the early stops are kinder (no gunship before column 3, no bombers before 2, no raid or castle in the first three): ${early} breaches`);
+  }
+  const plain = VG.generateVoyage(4242, { mode: 'voyage', gentle: true });
+  const same = VG.generateVoyage(4242, { mode: 'voyage', gentle: true, raft: false });
+  report(JSON.stringify(plain) === JSON.stringify(same) && !plain.columns.flat().some((q) => q.yard), 'a route that is not the raft\'s has no yard and is unchanged by the raft option');
+  const offR = (() => { R.ENABLED = false; const v = VG.generateVoyage(4242, { mode: 'voyage', gentle: true, raft: true }); R.ENABLED = true; return JSON.stringify(v) === JSON.stringify(plain); })();
+  report(offR, 'RAFT.ENABLED false: the raft option changes nothing (today\'s Sparrow route)');
+}
 console.log(ok ? 'curriculum check: PASS' : 'curriculum check: FAIL');
 process.exit(ok ? 0 : 1);

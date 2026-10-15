@@ -353,7 +353,7 @@ export function choicesFor(entry, parts, base) {
     try { next = c.apply(parts); } catch { continue; }
     if (!next || next.length === parts.length && JSON.stringify(next) === JSON.stringify(parts)) continue;
     const res = validate(next);
-    if (!res.ok || hijacks(res.layout) > b.hijack) continue;
+    if (!res.ok || (!(config.RAFT.ENABLED && res.layout.platforms.length <= 1) && hijacks(res.layout) > b.hijack)) continue; // (P5: a one-deck ship has nowhere else to put a steam pipe's valve or a rack: people's buttons take the seat first anyway, P3)
     const sum = summaryOf(res);
     good.push({ ...c, parts: next, summary: sum, warns: res.warns, note: noteFor(b.sum, sum, res.warns, b.res.warns) });
   }

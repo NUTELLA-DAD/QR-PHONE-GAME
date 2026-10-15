@@ -6,7 +6,7 @@
 //   hosts     (a) host.html loads with 0 console errors and 0 game errors: the lobby (NO ?view: 3D is the default), a flight with 8 bots, a dark cave, the Kraken's lair, Versus (10 s and, seeded, at close range at 30 s), and a seeded fight with the gunship, the squadron and a bomber;
 //             (d) in those scenes at Medium: draw calls <= 150, triangles <= 450k, view JS <= 6 ms;  (e) V.alignError (the HUD against the 3D picture) is 0 px with cinematics off
 //   models    (b) model.fallbacks is empty for the classic ship, the Sparrow, the five minimum builds, the enemy gunship and 10 generated ships
-//   shots     (c) fourteen seeded scenes (the last two, fight and versus_close, are the dearest pictures: they prove the perf batching changed no pixel) against tools/fixtures/shots3d/*.png (mean abs diff < 2 %, no 64 x 64 block over 12 %); --snapshot --force writes the fixtures
+//   shots     (c) fifteen seeded scenes (the last two, fight and versus_close, are the dearest pictures: they prove the perf batching changed no pixel) against tools/fixtures/shots3d/*.png (mean abs diff < 2 %, no 64 x 64 block over 12 %); --snapshot --force writes the fixtures
 //   tiers     the flight scene at High / Medium / Low: the numbers (printed), 0 errors
 //   fallback  (f) --gl swiftshader and no WebGL at all: the host comes up in 2D with 0 errors and never loads Three.js; the governor's step down to 2D (a toast, at a calm moment, never mid-fight)
 //   offline   (g) every page above runs with the network blocked for anything but localhost: 0 external requests, 0 failed loads; plus the phone page and the build page; a static scan for CDN links
@@ -336,7 +336,7 @@ try {
 
   // ---- shots: (c) the screenshot regression -------------------------------------------------------------------------------------------------------------------------------------
   if (want('shots')) {
-    console.log(snapshot ? 'shots: writing the fixtures' : 'shots: fourteen seeded scenes against tools/fixtures/shots3d/');
+    console.log(snapshot ? 'shots: writing the fixtures' : 'shots: fifteen seeded scenes against tools/fixtures/shots3d/');
     // Everything that makes the scene is ONE synchronous call (no real-time frame can take a random number in the middle): the generator is re-seeded, the bots climb aboard, she casts off, the
     // simulation (frozen from the start, see SEED) is stepped by hand. The page's Math.random and Date.now were fixed from its first line (SEED), so the map is the same too.
     const BOOT = (steps, tail = '', pre = '') => `(()=>{ ${pre} window.__seed(11);
@@ -356,6 +356,8 @@ try {
       { name: 'lobby', q: 'view=3d', setup: FREEZE_ONLY() },
       { name: 'flight', q: 'view=3d&env=skyisles&kind=open', setup: BOOT(420) },
       { name: 'cave', q: 'view=3d&env=skyisles&kind=network', setup: BOOT(420) },
+      // (PLAYTEST1.md P5: the RAFT, a one-deck ship that has never been drawn in 3D: one open deck, one small bag, the boiler and the helm, and the two gift frames (an engine pod aft, a gun fore) standing as scaffolds on her)
+      { name: 'raft', q: 'view=3d&ship=raft&env=skyisles&kind=open', setup: BOOT(420) },
       { name: 'kraken', q: 'view=3d&lair=1&creature=kraken', setup: BOOT(300, 'for(let i=0;i<60&&!game.state.creature;i++) window.__step(60); window.__step(180);') },
       { name: 'drake', q: 'view=3d&lair=ember&creature=drake', setup: BOOT(300, 'for(let i=0;i<60&&!game.state.creature;i++) window.__step(60); window.__step(420);') }, // (C.6a: the Cinder Drake, the placeholder tubes, in the Ember Forge)
       { name: 'thunderbird', q: 'view=3d&lair=storm&creature=thunderbird', setup: BOOT(300, 'for(let i=0;i<60&&!game.state.creature;i++) window.__step(60); window.__step(420);') }, // (the Thunderbird in the Storm Front lair: the storm-bird with layered gold-tipped feathers and lightning on its wings)

@@ -1,7 +1,7 @@
 import { config } from '../../config.js';
 import { mainShip, shipOf, crewOf } from './ships.js';
 import { crewAboard, crewHeads } from './crewscale.js';
-import { saveStartBuild } from './voyage.js';
+import { saveStartBuild, shipCycle } from './voyage.js';
 import { pageCount } from './book.js';
 
 // What a phone's input message does to its player (also used by tools/controls.mjs, which plays a person without a socket).
@@ -234,19 +234,10 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
     if (shipButton.innerHTML !== html) shipButton.innerHTML = html;
   };
   shipButton.onclick = () => {
-    const sb = simulation.state.startBuild;
-    const cycle = config.RAFT.ENABLED ? ['raft', 'sparrow', 'classic'] : ['sparrow', 'classic']; // (P5: Auto -> Raft -> Sparrow -> Classic -> Auto; with RAFT.ENABLED false, as before: Auto -> Sparrow -> Classic -> Auto)
-    if (simulation.state.startBuildAuto) { // (F1: Auto -> the first ship ... -> Classic -> Auto: all but the last force a ship, the last goes back to choosing by the crew size)
-      simulation.setStartBuild(cycle[0]);
-      saveStartBuild(cycle[0]);
-    } else if (config.VOYAGE.START_BUILD_BY_CREW.ENABLED && sb === 'classic') {
-      simulation.setStartBuild(simulation.pickStartBuild(), 'auto');
-      saveStartBuild(null);
-    } else {
-      const i = cycle.indexOf(sb), next = i < 0 ? cycle[1] : cycle[(i + 1) % cycle.length]; // (a playtest build goes to the first quick start)
-      simulation.setStartBuild(next);
-      saveStartBuild(next);
-    }
+    const next = shipCycle(simulation.state.startBuild, simulation.state.startBuildAuto); // (P5: Auto -> Raft -> Sparrow -> Classic -> Auto; the first presses force a ship, the last goes back to choosing by the crew size - F1)
+    if (next.auto) simulation.setStartBuild(simulation.pickStartBuild(), 'auto');
+    else simulation.setStartBuild(next.build);
+    saveStartBuild(next.auto ? null : next.build);
     showShip();
   };
   setInterval(() => { showMode(); showDaily(); showShip(); }, 500); // (a finished daily voyage updates today's best)
