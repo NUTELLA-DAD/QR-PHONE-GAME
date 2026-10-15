@@ -1,7 +1,10 @@
-// L7 (SHIPS_BOOK.md) in a real headless Chrome: PLAY OF THE MISSION in slow motion (the film with its caption), the awards scorecard and a phone with the award it won. Starts its OWN server on a free port and stops it by its PID at the end (never kills node globally); the host and one phone are two Chrome pages.
-// A Kraken is staged in the Sunken Sea so the film has something to show; the human phone makes the play.
-//   node tools/replay-shots.mjs [--out DIR] [--port N] [--view 2d|3d] [--suffix _x]
-// Default DIR is ../3d-screenshots; files are named replay_*.png. Exit 1 on any console error or a failed check.
+// L7 (SHIPS_BOOK.md) in a real headless Chrome: PLAY OF THE MISSION as REAL FOOTAGE of the TV in slow motion (early, at the moment, late), the awards scorecard after it and a phone with the award it won. Starts its OWN
+// server on a free port and stops it by its PID at the end (never kills node globally); the host and one phone are two Chrome pages.
+// The recording needs a real session: the 3D view on the machine's graphics card (--gl gpu, the default). --gl swiftshader (software GL) is far too slow to fly: it runs, but with few frames.
+// A Kraken is staged in the Sunken Sea so the film has something to show; the human phone makes the play. Checks along the way: the recorder's cost per picture, the JPEG sizes, the pictures held while playing, the
+// fallback (the recorder off = no film, the awards at once), SPACE skips.
+//   node tools/replay-shots.mjs [--out DIR] [--port N] [--view 3d|2d] [--gl gpu|swiftshader] [--suffix _x]
+// Default DIR is ../3d-screenshots; files are named replay2_*.png. Exit 1 on any console error or a failed check.
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -13,7 +16,8 @@ const argv = process.argv.slice(2);
 const arg = (k, d) => { const i = argv.indexOf('--' + k); return i < 0 ? d : argv[i + 1]; };
 const out = path.resolve(arg('out', 'C:/Users/kenny/Downloads/AIRSHIP/airship/3d-screenshots'));
 const port = Number(arg('port', 5900 + Math.floor(Math.random() * 90)));
-const view = arg('view', '2d');
+const view = arg('view', '3d');
+const gl = arg('gl', 'gpu');
 const sfx = arg('suffix', view === '3d' ? '_3d' : '');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failed = 0;
@@ -32,7 +36,7 @@ if (!chromePath) { console.log('no Chrome / Edge found'); stopServer(); process.
 async function openPage(url, W, H, mobile) {
   const dport = 9300 + Math.floor(Math.random() * 600);
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'replay-chrome-'));
-  const flags = ['--headless=new', `--remote-debugging-port=${dport}`, `--user-data-dir=${profile}`, `--window-size=${W},${H}`, '--hide-scrollbars', '--no-first-run', '--disable-extensions', '--mute-audio', '--ignore-gpu-blocklist', '--enable-webgl', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
+  const flags = ['--headless=new', `--remote-debugging-port=${dport}`, `--user-data-dir=${profile}`, `--window-size=${W},${H}`, '--hide-scrollbars', '--no-first-run', '--disable-extensions', '--mute-audio', '--ignore-gpu-blocklist', '--enable-webgl', ...(gl === 'gpu' ? [] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'])]; // (--gl gpu: the machine's real graphics card, for the frame-time numbers)
   const chrome = spawn(chromePath, [...flags, 'about:blank'], { stdio: 'ignore' });
   const P = { errors: [] };
   let ws, id = 0;
@@ -79,11 +83,12 @@ try {
   host = await openPage(`${BASE}/host.html?view=${view}&cine=0&christen=0&env=sea&kind=open`, 1600, 900, false);
   check(await host.waitFor('!!window.game && !!document.getElementById("code") && /^[A-Z0-9]{4}$/.test(document.getElementById("code").textContent)', 40000), 'the host page is up with a room code');
   const code = await host.ev('document.getElementById("code").textContent');
+  console.log('  graphics: ' + await host.ev('(()=>{ const g = document.createElement("canvas").getContext("webgl"); const e = g && g.getExtension("WEBGL_debug_renderer_info"); return e ? g.getParameter(e.UNMASKED_RENDERER_WEBGL) : "unknown"; })()'));
   phone = await openPage(`${BASE}/controller.html?code=${code}`, 780, 360, true);
   await phone.waitFor('!!document.getElementById("go")', 20000);
   await sleep(2500);
   await phone.ev(`document.getElementById("code").value="${code}"; document.getElementById("name").value="Mia"; document.getElementById("go").click(); 1`);
-  check(await host.waitFor('Object.values(game.state.players).some(p=>!p.bot)', 20000), 'the phone joined the crew');
+  check(await host.waitFor('Object.values(game.state.players).some(p=>!p.bot)', 40000), 'the phone joined the crew');
   await host.ev('(async()=>{ const {config}=await import("/config.js"); window.__cfg=config; return 1; })()');
   check(await host.ev('__cfg.REPLAY.ENABLED === true && __cfg.AWARDS.ENABLED === true'), 'L7 is on in the browser');
   await host.ev('window.perfGov && perfGov.setMode("high"); 1'); // (a headless Chrome is slow: the governor would drop to the lowest tier, where the replay is skipped on purpose)
@@ -101,25 +106,36 @@ try {
   await sleep(2600);
   await host.ev('(()=>{ const P = Object.values(game.state.players), H = P.find(p=>!p.bot), B = P.filter(p=>p.bot); H.stats = { coal: 9, kills: 4 }; B[0].stats = { boarding: 3, fires: 2 }; game.state.momentOverboard(B[1]); game.state.momentOverboard(B[1]); return 1 })()');
   check(await host.ev('game.replay.stats().best !== null || game.replay.stats().pending > 0'), 'the recorder has a clip of the moment');
+  const rc = JSON.parse(await host.ev('JSON.stringify({ cam: replayCam.stats(), rec: game.replay.stats(), meter: window.__meter && { fps: window.__meter.fps, draw: window.__meter.draw } })'));
+  console.log('  recorder: ' + JSON.stringify(rc));
+  check(rc.cam.on && rc.cam.mode === 'worker' && rc.cam.grabbed > 100, `the recorder runs and encodes off the main thread (${rc.cam.grabbed} pictures, mode ${rc.cam.mode})`);
+  check(rc.cam.mean < 1.5 && rc.cam.msMax < 10, `a picture costs the main thread ${rc.cam.mean.toFixed(2)} ms on average (worst ${rc.cam.msMax.toFixed(1)} ms)`);
+  check(rc.cam.encoded > 0 && rc.cam.bytes / rc.cam.encoded < 120000 && rc.rec.bytes <= 24000000, `the pictures are small JPEGs (${(rc.cam.bytes / rc.cam.encoded / 1000).toFixed(0)} KB each) and the recorder holds ${(rc.rec.bytes / 1e6).toFixed(1)} MB`);
   await host.ev('game.onMarker({ kind: "home", lap: 2 }); 1');
   check(await host.waitFor('!!game.state.scorecard && !!game.state.scorecard.film', 5000), 'the stop ends and the scorecard opens with a film');
   const info = await host.ev('JSON.stringify({ kind: game.state.scorecard.film.clip.kind, len: game.state.scorecard.film.clip.len, frames: game.state.scorecard.film.clip.frames.length, play: game.state.scorecard.play && game.state.scorecard.play.text, rows: game.state.scorecard.rows.map(r=>r.title+":"+r.name), kb: game.replay.stats().bytes/1024 })');
   console.log('  ' + info);
-  check(await host.waitFor('game.state.scorecard.film.u > 0.9', 6000), 'the film plays');
-  await host.shot('replay_1_film_early_tv.png');
-  check(await host.waitFor('game.state.scorecard.film.u > game.state.scorecard.film.clip.mark / game.state.scorecard.film.clip.fps + 0.15', 25000), 'the film reaches the moment');
-  await host.shot('replay_2_film_moment_tv.png');
+  check(await host.waitFor('game.state.scorecard.film.ready && game.state.scorecard.film.u > 0.9', 6000), 'the film is decoded and plays');
+  let maxHeld = await host.ev('game.state.scorecard.film.src ? game.state.scorecard.film.src.held : -1');
+  check(await host.ev('(() => { const f = game.state.scorecard.film, c = f.clip; return c.frames.length >= 20 && c.frames.every(q => q.blob && q.blob.type === "image/jpeg" && q.blob.size > 3000) && f.src && f.src.held > 0 && f.src.at(f.src.held > 0 ? Math.floor(f.u * c.fps) : 0) })()'), 'the clip is real JPEG footage and its pictures decode');
+  await host.shot('replay2_1_film_early_tv.png');
+  check(await host.waitFor('game.state.scorecard.film.u > game.state.scorecard.film.clip.tm + 0.15', 25000), 'the film reaches the moment');
+  await host.shot('replay2_2_film_moment_tv.png');
+  maxHeld = Math.max(maxHeld, await host.ev('game.state.scorecard.film.src ? game.state.scorecard.film.src.held : -1'));
   check(await host.waitFor('game.state.scorecard.film.u > game.state.scorecard.film.clip.len - 0.7', 25000), 'and runs on');
-  await host.shot('replay_3_film_late_tv.png');
+  await host.shot('replay2_3_film_late_tv.png');
+  maxHeld = Math.max(maxHeld, await host.ev('game.state.scorecard.film.src ? game.state.scorecard.film.src.held : -1'));
+  const L = JSON.parse(await host.ev('JSON.stringify(__cfg.REPLAY.LOAD)'));
+  check(maxHeld > 0 && maxHeld <= L.AHEAD + L.BEHIND + 4, `only a window of decoded pictures is held while it plays (at most ${maxHeld} of ${JSON.parse(info).frames}, about ${(maxHeld * 800 * 450 * 4 / 1e6).toFixed(0)} MB)`);
   const t0 = Date.now();
   check(await host.waitFor('game.state.scorecard.film.done', 10000), 'the film ends by itself');
   console.log('  the film took ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s more after the last shot');
   await sleep(700);
-  await host.shot('replay_4_awards_tv.png');
+  await host.shot('replay2_4_awards_tv.png');
   check(await phone.waitFor('document.getElementById("rcard").classList.contains("show")', 4000), 'the phone shows a card for its award');
   await sleep(300);
   console.log('  phone card: ' + await phone.ev('document.getElementById("rctitle").textContent + " - " + document.getElementById("rctext").textContent'));
-  await phone.shot('replay_5_phone_award.png');
+  await phone.shot('replay2_5_phone_award.png');
 
   // the second stop: skip with SPACE
   await host.ev('(()=>{ game.state.scorecard = null; game.state.vote = null; game.state.phase = "flying"; return 1 })()');
@@ -132,6 +148,17 @@ try {
   await sleep(900);
   await host.ev('window.dispatchEvent(new KeyboardEvent("keydown", { key: " " })); 1');
   check(await host.waitFor('game.state.scorecard && game.state.scorecard.film.skipped && game.state.scorecard.film.done', 3000), 'SPACE skips the replay');
+  check(await host.ev('(() => { const f = game.state.scorecard.film; return f.src === null && f.clip.frames.every(q => !q.blob) })()'), 'and its pictures are let go');
+
+  // the fallback: a recorder that is off (no support, too costly) means no film and the awards at once
+  await host.ev('(()=>{ replayCam.switchOff("shots: the fallback test"); game.state.scorecard = null; game.state.vote = null; game.state.phase = "flying"; return 1 })()');
+  await sleep(2500);
+  await host.ev('(()=>{ const H = Object.values(game.state.players).find(p=>!p.bot); game.moments.moment("boss-down", { who: [H.id] }); return 1 })()');
+  await sleep(1500);
+  await host.ev('game.onMarker({ kind: "home", lap: 4 }); 1');
+  check(await host.waitFor('!!game.state.scorecard', 5000) && await host.ev('game.state.scorecard.film === null && game.state.scorecard.rows.length > 0'), 'with the recorder off the scorecard has no film and goes straight to the awards');
+  await sleep(500);
+  await host.shot('replay2_6_fallback_awards_tv.png');
 
   const errs = [...host.errors, ...phone.errors, ...(await host.ev('window.gameErrors||[]') || [])];
   for (const e of errs.slice(0, 6)) console.log('  ' + e);

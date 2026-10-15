@@ -2659,24 +2659,26 @@ export const config = {
     PHONE_MS: 2600, // the toast on each human phone when she appears
     PRI: 6, // the alarm priority of her headlines (ALARMS.PRI: setpiece and objective are 5, helm and structure 6): she is told, not queued out
   },
-  // PLAY OF THE MISSION, L7 (SHIPS_BOOK.md; replay.js, replayArt.js): while a stop is flown a cheap recorder keeps the last PRE seconds of the sky as small numbers (FPS frames a second: the ships' poses, the crew's
-  // places, the enemies, shots, the creature's segments); a moment that weighs MIN_WEIGHT or more starts a clip (PRE before it, POST after it). At the stop's end the clip of the stop's top moment (the Log's "play of
-  // the mission") is played on the scorecard as a hand-inked film in slow motion, with its caption, then the awards. View only: it reads the sim and never writes it. SPACE / CAST OFF skips it.
-  // On with the Book (BOOK_ON=1 in a Node tool); NO_L7=1 turns just this off. Off = the old scorecard, byte for byte.
+  // PLAY OF THE MISSION, L7 (SHIPS_BOOK.md; replay.js, replayCam.js, replayArt.js): the scorecard replays the stop's top moment as REAL FOOTAGE of the TV picture, in slow motion. While a stop is flown the browser copies the
+  // 3D canvas (FPS times a second) down to a small JPEG and keeps the last PRE seconds; a moment that weighs MIN_WEIGHT or more starts a clip (PRE before it, POST after it). At the stop's end the clip of the stop's top
+  // moment (the Log's "play of the mission") is played on the scorecard with its caption, then the awards. View only: it reads the sim and never writes it. SPACE / CAST OFF skips it. No recording support, the lowest
+  // quality tier, or a recorder that costs too much = no film, the awards come at once. On with the Book (BOOK_ON=1 in a Node tool, where no frames are ever recorded); NO_L7=1 turns just this off.
   REPLAY: {
-    ENABLED: typeof process !== 'undefined' && !!(process.env && process.env.BOOK_ON) && !process.env.NO_BOOK2 && !process.env.NO_L7, // (owner's bar: the drawn sketch film is OFF in the game until the real-footage replay lands; the awards stay on - AWARDS.ENABLED)
-    FPS: 12, // frames recorded each second of flying (ships and crew are smoothed between frames when it plays)
-    PRE: 2.4, POST: 1.2, // seconds of film before the moment and after it
+    ENABLED: typeof process === 'undefined' || (!!(process.env && process.env.BOOK_ON) && !process.env.NO_BOOK2 && !process.env.NO_L7),
+    FPS: 15, // pictures kept each second of flying (they are blended into each other when the film plays slowly)
+    PRE: 2.8, POST: 1.4, // seconds of film before the moment and after it
     MIN_WEIGHT: 6, // a moment (config.LOG.WEIGHT) needs this weight to be filmed; the clip the scorecard plays is the stop's top moment, so a stop whose best is lighter has none
     MAX_PENDING: 3, // clips still waiting for their last seconds at once (the lightest are dropped first)
-    MAX_BYTES: 600000, // the most the recorder holds (estimated: 8 bytes a number); the rolling buffer sheds its oldest frames, a clip that would not fit is dropped
-    CAPS: { SHIPS: 4, CREW: 20, FOES: 40, SHOTS: 48, FLASHES: 8, FIRES: 12, PARTS: 24, SEGS: 160, SLOTS: 8, PALETTE: 40 }, // most of each thing in one frame (SLOTS: different ships, PALETTE: different crewmen, in one stop)
-    SPEED: { LEAD: 0.9, KEY: 0.3, EASE: 0.9 }, // the film's speed: LEAD x normal, slowing to KEY x within EASE s either side of the moment (so 3.6 s of sky last about 5 s)
+    MAX_BYTES: 24000000, // the most the recorder holds: the size of the JPEGs (about 30 MB all told with the pictures being played); the rolling buffer sheds its oldest frames, a clip that would not fit is dropped
+    CAPS: { CREW: 20, PALETTE: 40 }, // most of each thing in one frame (CREW: people tracked on the picture, PALETTE: different crewmen in one stop)
+    // The grab (replayCam.js): the TV picture is copied to a W px wide canvas (the height follows the picture), encoded as a JPEG of quality Q, off the main thread. At most MAX_INFLIGHT pictures wait to be encoded (the
+    // rest of the frames are skipped); if a grab costs more than COST_MS on average over COST_N grabs the recorder switches itself off for the session (the awards still come).
+    CAP: { W: 800, Q: 0.72, EST_BYTES: 45000, MAX_INFLIGHT: 4, COST_MS: 6, COST_N: 40 },
+    SPEED: { LEAD: 0.85, KEY: 0.4, EASE: 1.0 }, // the film's speed: LEAD x normal, slowing to KEY x within EASE s either side of the moment
+    LOAD: { WAIT: 3, AHEAD: 6, BEHIND: 1 }, // playback: pictures decoded ahead of the film and kept behind it (memory), and the longest the scorecard waits for the first ones before giving the film up
     SKIP_LOW: true, // no film on the lowest quality tier (the perf governor's level 0)
-    // The camera of the film: it frames our ship, the thing she is fighting and the person who did it, eased over TAU s (a critically damped follower, no overshoot), pushing in PUSH x around the moment.
-    CAM: { PAD: 1.25, TAU: 0.55, ZOOM_MIN: 0.14, ZOOM_MAX: 0.62, PUSH: 0.16, PUSH_SECS: 1.2, KEEP_SHIP: 0.16, FOE_RANGE: 4200, FOE_PAD: 500 }, // (KEEP_SHIP: when the zoom cannot take everything in, our ship keeps this share of the window clear on each side)
-    // Drawing (replayArt.js, logical 1600 x 900: 22 px is 26 px on a 1080p TV). X Y W H = the film's window.
-    ART: { X: 130, Y: 172, W: 1340, H: 508, MIN_PX: 22, KEYS: 12, HINT: 'SPACE - skip the replay' },
+    // Drawing (replayArt.js, logical 1600 x 900: 22 px is 26 px on a 1080p TV). X Y W H = the box the picture is fitted in (it keeps the TV's shape); the strip round it carries the sprocket holes.
+    ART: { X: 130, Y: 170, W: 1340, H: 510, MIN_PX: 22, HINT: 'SPACE - skip the replay', STRIP: 34 },
   },
   // AWARDS v2, L7 (awards.js): at most MAX awards on a stop's scorecard, chosen from the stop's stats and moments, funny and readable. Each stat award needs MIN of its stat and scores count / TARGET (a good stop's
   // count); the HERO (whoever made the play of the mission, if it weighs HERO.MIN_WEIGHT), BUTTERFINGERS (loads lost when knocked out) and FELL OVERBOARD (twice or more in one stop) are moments with their own score.
