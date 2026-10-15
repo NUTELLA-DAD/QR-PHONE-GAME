@@ -71,7 +71,7 @@ export function strengthOf(foe, final) {
 
 // ---- the plan: which stops she flies in ----
 // Can this stop host her? Not a lair, a ring, a salvage run, the harbour or the Flagship, and its set pieces must allow a gunship.
-export const hosts = (stop, course) => !!stop && !stop.lair && !stop.ring && !stop.salvage && !stop.flagship && !stop.harbour && !(course && course.ring) && (!stop.gates || stop.gates.includes('gunship'));
+export const hosts = (stop, course) => !!stop && !stop.lair && !stop.ring && !stop.salvage && !stop.defend && !stop.flagship && !stop.harbour && !(course && course.ring) && (!stop.gates || stop.gates.includes('gunship'));
 // Is this the stop for her? r = the voyage's state { dueCol, meetings }; returns { col, n, final } or null.
 export function planFor(r, stop, lastCol, course) {
   const N = NM();

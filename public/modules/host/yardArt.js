@@ -134,7 +134,7 @@ export function createYardArt({ ctx, book, dots, wrapLines, ink, pics, spares, w
         ctx.font = '700 12px ' + config.FONTS.TEXT;
         const t = o.badge + (o.spots > 1 ? ` - ${o.spots} places` : '');
         const tw = ctx.measureText(t).width + 14;
-        ctx.fillStyle = o.derelict ? '#4f7f3f' : L.PIN_DARK;
+        ctx.fillStyle = o.derelict || o.named ? '#4f7f3f' : L.PIN_DARK;
         ctx.fillRect(-tw, 0, tw, 20);
         ctx.fillStyle = '#f3ead6';
         ctx.textAlign = 'right';
@@ -199,7 +199,7 @@ export function createYardArt({ ctx, book, dots, wrapLines, ink, pics, spares, w
       else if (part && !part.sold) {
         lines.push([`${part.baseName}: ${part.desc}`, '22px ' + config.FONTS.DISPLAY, L.INK, 28]);
         lines.push([part.choices.map((c) => `${c.letter} ${c.where}`).join('   '), '700 15px ' + config.FONTS.TEXT, L.INK_SOFT, 20]);
-        lines.push([part.derelict ? 'A derelict drifts by: this part is FREE.' : 'Everybody votes for the part card: a quarter off.', '400 15px ' + config.FONTS.TEXT, part.derelict ? GOOD : L.INK_SOFT, 20]);
+        lines.push([part.named ? 'You stripped this off ' + part.named.from + (part.named.by.length ? ' (' + part.named.by.join(', ') + ')' : '') + ': a cheap part with a story.' : part.derelict ? 'A derelict drifts by: this part is FREE.' : 'Everybody votes for the part card: a quarter off.', '400 15px ' + config.FONTS.TEXT, part.derelict || part.named ? GOOD : L.INK_SOFT, 20]);
       } else lines.push(['Nothing more to build at this dock.', '400 18px ' + config.FONTS.TEXT, L.INK_SOFT, 24]);
       note(lines);
       shopCards(v, voters);

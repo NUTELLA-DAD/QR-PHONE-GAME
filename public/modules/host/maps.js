@@ -18,7 +18,15 @@ export function shipBox(layout) {
 
 // A SALVAGE RUN (voyage.js, simulation.js markSalvage; config.VOYAGE.CURRICULUM.SALVAGE): the catch-up stop of a crew that is behind. For now it is flown on the map kind SALVAGE.MAP (a pass: no outposts, a beacon
 // at the end, so even a ship with no bomb bay can finish it) a level lower, and the map is flagged map.salvage; package G6 gives it a real objective.
-export function makeMap(kind, level, rand, lengthMul = 1, layout, creature = null, variant = null, slack = null) { // (variant: which ring a 'ring' map is, 'tower' | 'fortress' | 'citadel'; slack: F1, squares of spare room in a cave's tunnels and shafts instead of config.MAPS.TUNNEL_SLACK / SHAFT_SLACK)
+export function makeMap(kind, level, rand, lengthMul = 1, layout, creature = null, variant = null, slack = null, field = null) { // (variant: which ring a 'ring' map is, 'tower' | 'fortress' | 'citadel'; slack: F1, squares of spare room in a cave's tunnels and shafts instead of config.MAPS.TUNNEL_SLACK / SHAFT_SLACK; field: G6, 'salvage' | 'defend' = the open FIELD map of a salvage run (wrecks to strip) or a DEFEND stop (a balloon), buildFieldMap below)
+  if (field) {
+    let map = null;
+    for (let tries = 0; tries < 12; tries++) { // (built again, barer, if the rock shut a site in)
+      map = buildFieldMap(Math.max(1, level - (field === 'salvage' ? config.VOYAGE.CURRICULUM.SALVAGE.LEVEL_DROP : 0)), rand, lengthMul, layout, field, tries);
+      if (map.startDist < 1e9) return map;
+    }
+    return map;
+  }
   if (kind !== 'salvage') return makeMapOf(kind, level, rand, lengthMul, layout, creature, variant, slack);
   const S = config.VOYAGE.CURRICULUM.SALVAGE;
   const map = makeMapOf(S.MAP, Math.max(1, level - S.LEVEL_DROP), rand, lengthMul, layout, creature, null, slack);
@@ -260,6 +268,70 @@ function buildOpenMap(level, rand, lengthMul = 1, layout) {
   const map = { kind: 'open', level, CELL: C, W, H, solid, turrets, outposts, open: true };
   // Aim first for the station above the first outpost.
   finishMap(map, { i: 12, j: H - 14 }, stationCell(map, outposts[0]), layout);
+  return map;
+}
+
+// A wreck's place (G5): near column kx of a finished open map, the cell { i, jr } at row row0 or below (down to half the map) where the SHIP can hover (map.fit, reachable by map.dist) with a wreck's deck config.DERELICT.HOVER_REF px
+// under her reference point and free air round the hull; null if there is none within 10 columns. No random numbers.
+export function findHover(map, kx, row0) {
+  const D = config.DERELICT, C = map.CELL, W = map.W, H = map.H, idx = (i, j) => j * W + i;
+  const down = Math.round(D.HOVER_REF / C), half = Math.ceil(D.W[1] / 2 / C) + 1;
+  for (let d = 0; d <= 10; d++) {
+    for (const sgn of d ? [1, -1] : [1]) {
+      const i = kx + sgn * d;
+      if (i < 30 || i > W - 12) continue;
+      for (let jr = row0; jr <= Math.round(H * 0.5); jr++) {
+        if (!map.fit[idx(i, jr)] || map.dist[idx(i, jr)] >= 1e9) continue;
+        const dj = jr + down;
+        let free = true;
+        for (let ii = i - half; ii <= i + half && free; ii++) for (let jj = dj - 2; jj <= dj + 2; jj++) if (jj >= H || ii < 0 || ii >= W || map.solid[idx(ii, jj)]) { free = false; break; }
+        if (free) return { i, jr };
+      }
+    }
+  }
+  return null;
+}
+
+// A FIELD map (LOOP.md G6, config.DERELICT.RUN / .DEFEND, stopGoals.js): open sky with rolling hills and a few floating islands and NO outposts or guns, for a SALVAGE RUN (field 'salvage': wrecks hang at map.sites, the crew strips them) or a
+// DEFEND stop (field 'defend': a stranded balloon hangs at the one site). map.sites = [ { x, y (the deck / the basket, px), hx, hy (the cell the ship hovers at to work it) } ]; each site has open air for the hull and a way there for
+// the ship (map.fit, map.dist), checked here; the route's goal starts at the first site (stopGoals.js moves it). Draws no random numbers beyond the hills and islands. startDist >= 1e9 = a site was shut in: built again, barer.
+function buildFieldMap(level, rand, lengthMul = 1, layout, field, tries = 0) {
+  const M = config.MAPS, D = config.DERELICT, F = field === 'salvage' ? D.RUN.FIELD : D.DEFEND.FIELD, C = M.CELL;
+  const r = (a, b) => a + rand() * (b - a);
+  const ri = (a, b) => Math.floor(r(a, b + 1));
+  const W = Math.max(70, Math.round(F.WIDTH * lengthMul));
+  const H = F.HEIGHT;
+  const solid = new Uint8Array(W * H);
+  const idx = (i, j) => j * W + i;
+  const s1 = r(0, 6), s2 = r(0, 6);
+  const groundTop = (i) => Math.round(H - 3 - (4 + 2.5 * Math.sin(i * 0.07 + s1) + 1.5 * Math.sin(i * 0.19 + s2)));
+  for (let i = 0; i < W; i++) for (let j = i < 26 ? H - 6 : groundTop(i); j < H; j++) solid[idx(i, j)] = 1;
+  const keep = (Array.isArray(F.AT) ? F.AT : [F.AT]).map((f) => Math.round(f * W)); // (the columns the sites are wanted at: no island there)
+  for (let k = 0; k < Math.max(0, F.ISLANDS - Math.floor(tries / 3)); k++) {
+    let ci = ri(34, W - 16);
+    for (let t = 0; t < 8 && keep.some((x) => Math.abs(ci - x) < 12); t++) ci = ri(34, W - 16);
+    if (keep.some((x) => Math.abs(ci - x) < 12)) continue;
+    const cj = ri(8, Math.round(H * 0.27)), rx = r(4, 8), ry = r(2.5, 4);
+    for (let j = Math.floor(cj - ry); j <= Math.ceil(cj + ry * 1.8); j++) for (let i = Math.floor(ci - rx); i <= Math.ceil(ci + rx); i++) {
+      if (i < 0 || j < 2 || i >= W || j >= H) continue;
+      const u = (i - ci) / rx, v = j < cj ? (j - cj) / ry : (j - cj) / (ry * 1.8);
+      if (u * u + v * v <= 1) solid[idx(i, j)] = 1;
+    }
+  }
+  const map = { kind: 'field', level, CELL: C, W, H, solid, turrets: [], outposts: [], open: true, field, salvage: field === 'salvage', sites: [] };
+  finishMap(map, { i: 12, j: H - 14 }, { i: Math.round(W * 0.4), j: Math.round(H * 0.38) }, layout); // (a stand-in goal: the sites are looked for on the field of cells the ship can reach)
+  if (!(map.startDist < 1e9)) return map;
+  for (const kx of keep) {
+    const site = findHover(map, kx, Math.round(H * 0.3) + ri(0, 6)); // (each wreck hangs at its own height)
+    if (!site) { map.startDist = Infinity; return map; }
+    const x = (site.i + 0.5) * C, hy = (site.jr + 0.5) * C;
+    let hx = x;
+    if (field === 'defend') { const hi = site.i - 4; if (map.fit[idx(hi, site.jr)] && map.dist[idx(hi, site.jr)] < 1e9) hx = (hi + 0.5) * C; } // (the ship stands off a little to the side of the balloon, her guns across it)
+    map.sites.push({ x, y: hy + (field === 'salvage' ? D.HOVER_REF : 0), hx, hy });
+  }
+  const s0 = map.sites[0];
+  setGoal(map, { i: Math.floor(s0.hx / C), j: Math.floor(s0.hy / C) });
+  map.startDist = map.dist[Math.floor(map.start.y / C) * W + Math.floor(map.start.x / C)];
   return map;
 }
 

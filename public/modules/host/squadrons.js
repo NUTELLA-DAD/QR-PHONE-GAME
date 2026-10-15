@@ -204,15 +204,16 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
         continue;
       }
       b.phase += dt * 14;
+      if (b.onGoal) continue; // (G6 DEFEND: a bat that has reached the balloon hangs on it until it is shot, stopGoals.js)
       if (b.leaving) {
         b.age += dt;
         b.x += b.vx * dt;
         b.y += b.vy * dt;
         continue;
       }
-      // Steer toward their chosen spot on the ship, fluttering.
-      const tx = toWorldX(ship, b.tx);
-      const ty = toWorldY(ship, b.ty);
+      // Steer toward their chosen spot on the ship, fluttering. (G6: a bat with a goal - the stranded balloon - flies for that point of the sky, which does not move with the ship.)
+      const tx = b.goal ? b.goal.x : toWorldX(ship, b.tx);
+      const ty = b.goal ? b.goal.y : toWorldY(ship, b.ty);
       const dx = tx - b.x;
       const dy = ty - b.y;
       const d = Math.hypot(dx, dy) || 1;
@@ -251,14 +252,16 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
         wy += (cy / cd) * W.BAT_COHESION * 0.5 + (ay / ad) * W.BAT_ALIGN * 0.5;
       }
       const wd = Math.hypot(wx, wy) || 1;
-      b.vx += ((wx / wd) * speed + vs - b.vx) * Math.min(1, dt * 2.5);
+      b.vx += ((wx / wd) * speed + (b.goal ? 0 : vs) - b.vx) * Math.min(1, dt * 2.5);
       b.vy += ((wy / wd) * speed - b.vy) * Math.min(1, dt * 2.5);
       b.x += b.vx * dt;
       b.y += b.vy * dt + Math.sin(b.phase) * 40 * dt;
       b.y = keepClear(state, b.x, b.y, 30);
-      if (!b.dead && !state.ship.down && touches(b.x, b.y, 14)) latchOn(b);
+      if (b.goal) { // (G6: it has reached the balloon)
+        if (!b.dead && Math.hypot(b.x - b.goal.x, b.y - b.goal.y) < b.goal.r) { b.onGoal = true; b.vx = b.vy = 0; }
+      } else if (!b.dead && !state.ship.down && touches(b.x, b.y, 14)) latchOn(b);
     }
-    state.bats = state.bats.filter((b) => !b.dead && b.hp > 0 && Math.abs(b.x - toWorldRefX()) < 6000 && !(b.leaving && b.age > W.BAT_LIFE + 4));
+    state.bats = state.bats.filter((b) => !b.dead && b.hp > 0 && (b.goal || Math.abs(b.x - toWorldRefX()) < 6000) && !(b.leaving && b.age > W.BAT_LIFE + 4));
   };
 
   // A bat that reached the ship picks a landing spot (ship coordinates: lx, ls) and crawls to it:
@@ -724,7 +727,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
   const withdraw = (far, force) => {
     const m = shipMid();
     for (const b of state.bats) {
-      if (b.latched || b.leaving || b.delay > 0) continue;
+      if (b.latched || b.leaving || b.delay > 0 || b.goal) continue; // (G6: a wave for the balloon stays until it is beaten or the stop is over)
       b.leaving = true;
       b.age = W.BAT_LIFE;
       b.vx = (b.x < m.x ? -1 : 1) * W.BAT_SPEED + ship.pose.vx;

@@ -997,6 +997,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       return;
     }
     if (map.ring) return ringSys.progress(sx, sy); // (a ring map: its faces are fought like outposts, ring.js)
+    if (course.goal && state.goals) return state.goals.progress(sx, sy, dt); // (G6: a field map - a salvage run's wrecks or a balloon to defend - has its own goal, stopGoals.js)
     if (map.open && !map.lair) {
       // Open sky: knock out every outpost (all its guns), nearest first.
       for (const o of map.outposts) if (!o.done && course.turrets.filter((t) => t.outpost === map.outposts.indexOf(o)).every((t) => t.dead)) {
@@ -1098,6 +1099,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       if (course.map.lair && course.map.creature === 'eel') return h || v ? "Way to the Eel's lair: " + [v, h].filter(Boolean).join(' and ') : 'The lair! Watch for the gold lure - it is a trap - and brake or climb when it gapes.';
       if (course.map.lair && course.map.creature === 'mother') return h || v ? "Way to the Mother's lair: " + [v, h].filter(Boolean).join(' and ') : 'The lair! Hold her under the dark dome - and keep clear of the rock pillars.';
       if (course.map.lair) { const dr = course.map.creature === 'drake', tb = course.map.creature === 'thunderbird', ti = course.map.creature === 'titan', wy = course.map.creature === 'wyrm'; return h || v ? 'Way to the ' + (wy ? "Wyrm's" : ti ? "Titan's" : tb ? "Thunderbird's" : dr ? "Drake's" : "Kraken's") + ' lair: ' + [v, h].filter(Boolean).join(' and ') : wy ? 'The lair! Keep clear of the ice cliffs - the Wyrm lies under them.' : ti ? 'The lair! Keep her high over the Titan, clear of its hands.' : tb ? 'The lair! Hold her steady in the storm, clear of the spires.' : dr ? 'The lair! Keep her over the shelf, clear of the lava.' : 'The lair! Keep her over the water, clear of the sea.'; }
+      if (course.map.field) { const defend = course.map.field === 'defend'; return h || v ? (defend ? 'Way to the balloon: ' : 'Way to the wrecks: ') + [v, h].filter(Boolean).join(' and ') : defend ? 'The balloon! Stand off, guns across it, and shoot the bats off it.' : 'A wreck! Hover over her and lower the rope ladder on the lowest deck.'; } // (G6: the field maps)
       return h || v ? (course.map.open ? 'Next outpost: ' : 'Way to the beacon: ') + [v, h].filter(Boolean).join(' and ') : course.map.open ? 'Outpost below - guns and bombs!' : '';
     }
     const w = altWindow(state, 2.5);
@@ -1232,7 +1234,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     const MP = config.MAPS, BR = config.STOP_SHAPE.BRIEFING;
     let kind = opts.stop && opts.stop.lair ? 'lair' : MP.FORCE_KIND || opts.kind || MP.KINDS[(n - 1) % MP.KINDS.length]; // (a lair stop: the Kraken's sea, maps.js buildLairMap, whatever the tools force)
     if (kind === 'ring' && !config.RING.ENABLED) kind = 'open'; // (the switch, R0: with the ring off a ring stop flies the old outpost raid)
-    const map = opts.arena ? buildArenaMap(course.rand, layout, opts.arena, opts.arenaGap) : makeMap(kind, n, course.rand, opts.lengthMul || 1, layout, opts.stop && opts.stop.creature, config.RING.FORCE_VARIANT || (opts.stop && opts.stop.ring) || null, opts.stop && opts.stop.slack); // (F1: opts.stop.slack = the wider caves of a small ship's early stops, maps.js makeMap; a lair map: the Kraken's sea or the Drake's lava, by opts.stop.creature; Versus: the big arena sky, maps.js buildArenaMap)
+    const map = opts.arena ? buildArenaMap(course.rand, layout, opts.arena, opts.arenaGap) : makeMap(kind, n, course.rand, opts.lengthMul || 1, layout, opts.stop && opts.stop.creature, config.RING.FORCE_VARIANT || (opts.stop && opts.stop.ring) || null, opts.stop && opts.stop.slack, opts.field || null); // (G6: opts.field 'salvage' | 'defend' = the open field of a salvage run or a DEFEND stop, maps.js buildFieldMap) (F1: opts.stop.slack = the wider caves of a small ship's early stops, maps.js makeMap; a lair map: the Kraken's sea or the Drake's lava, by opts.stop.creature; Versus: the big arena sky, maps.js buildArenaMap)
     map.environment = pickEnvironment(opts.environment); // 'skyisles' (the original look and rules), 'frost', 'ember'...
     const d = Math.min(1, (n - 1) / 4);
     Object.assign(course, {
@@ -1278,6 +1280,8 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     course.lastMarker = course.markers[0];
     ringSys.begin(map); // (a ring map: the faces' state, course.ring; null on any other map)
     if (state.groundSys) state.groundSys.begin(map); // (A0: the walkways and ladders of this ground; whoever was still on the last one is brought home, ground.js)
+    course.goal = null; // (G6: the goal of a field map)
+    if (state.goals) state.goals.begin(map);
     ship.pose.x = map.start.x - REF.x;
     course.homeAlt = REF.y - map.start.y;
     ship.pose.y = -course.homeAlt;
@@ -1321,5 +1325,5 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
 
   if (config.MAPS.ENABLED) startMission(1, firstMission && firstMission());
 
-  return { advance, update, reset, restart, helmHint, dropBomb, predictBomb, startMission, place, ringSys, blast };
+  return { advance, update, reset, restart, helmHint, dropBomb, predictBomb, startMission, place, ringSys, blast, finishStop };
 }

@@ -10,6 +10,8 @@
 //   PAY      the stop ending (simulation.js stopDone) or the dock (startDock) pays each stowed chest and any in a man's arms aboard; a chest lifted in the F6 ESCAPE calm is a HEIST (a bonus, a Book moment)
 //   GUARDS   the first chest lifted calls a small squad; it walks up, aims (a tell and a line), and shoots at a man who CARRIES: run, shove it (ATTACK), put the chest down, or carry it in a pair
 //
+//   PARTS    (LOOP.md G5, derelicts.js) a part stripped off a wreck is a chest of kind 'part': give() puts it in a man's arms, it is carried, put down (on a wreck's deck it lies there and drifts with her: c.onDeck), roped up, stowed, hooked and paid like a chest -
+//            but paid as a named part card at the next dock (host.partIn when it comes aboard, host.partPaid when it is paid)
 // State: state.away.tre = { on, vaults, chests, guards, shots, stats }; a chest is { id, vault, kind chest | gold, x, y, state ground | carried | hauled | aboard | hold | gone, by: [player ids], w, pay, prog, heist }.
 // Everything is deterministic (a hash of the stop and the outpost picks the gold; a private generator rolls the guards' shots).
 import { config } from '../../config.js';
@@ -23,6 +25,7 @@ const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h =
 export const META = {
   chest: { label: 'CHEST', verb: 'GRAB', act: 'GRAB THE CHEST', color: '#ffd23f' },
   gold: { label: 'GOLD', verb: 'GRAB', act: 'GRAB THE GOLD', color: '#ffe27a' },
+  part: { label: 'PART', verb: 'GRAB', act: 'LIFT THE PART', color: '#b8c4cc' }, // (LOOP.md G5, derelicts.js: a part stripped off a wreck is a heavy crate carried exactly like a chest: it lies on the wreck's deck, up the rope, into the hold; paid as a named part card at the dock)
 };
 
 // ---- the hold (cargo.js reads these; scrap.js holdWeight reads state.chestHold) ----
@@ -39,7 +42,7 @@ export function chestStowAction(state, p, L, here) {
 
 export function createTreasure({ state, S, host }) {
   const stats = { vaults: 0, opened: 0, chests: 0, gold: 0, lifted: 0, helped: 0, dropped: 0, lost: 0, aboard: 0, stowed: 0, hooked: 0, paid: 0, heists: 0, guards: 0, tells: 0, shots: 0, hits: 0, kos: 0, shoves: 0, left: 0, trips: 0 }; // (the tools' tally: it runs on over every map of a run)
-  const fresh = () => ({ on: false, clock: 0, vaults: [], chests: [], guards: [], shots: [], nextId: 1, seed: 0x2f6e2b1d, note: false, stowMoment: false, stats });
+  const fresh = () => ({ on: false, clock: 0, vaults: [], chests: [], guards: [], shots: [], nextId: 1, seed: 0x2f6e2b1d, note: false, stowMoment: false, keep: false, stats }); // (keep: G5, a map with wrecks on it: the chests (parts) are live even with no vault)
   S.tre = fresh();
   const mapNow = () => (state.course && state.course.map) || null;
   const humans = () => Object.values(state.players).some((p) => !p.bot && !p.enemy && !p.mate && p.connected !== false);
@@ -58,6 +61,7 @@ export function createTreasure({ state, S, host }) {
     const t = (S.tre = fresh());
     const K = T();
     if (!K.ENABLED || !config.AWAY.ENABLED || !map || !map.open || map.lair || map.ring || map.arena || !map.outposts) return;
+    if (map.field) return; // (a field map has no outposts to open a vault: its parts come off the wrecks, derelicts.js)
     map.outposts.forEach((o, k) => t.vaults.push({ k, x: o.x, y: o.y, state: 'shut', ids: [], alarm: false, guardT: 0, guards: false, openAt: 0 }));
     stats.vaults += t.vaults.length;
   }
@@ -143,7 +147,19 @@ export function createTreasure({ state, S, host }) {
     if (helper) { stats.helped++; pop(state, c.x, c.y - 200, 'TWO CARRY!', c.color, 1.2); host.phoneFx(p, 'You and ' + (state.players[c.by[0]] || {}).name + ' carry it together - faster!', [30, 40, 30]); return; }
     firstLift(c);
     pop(state, c.x, c.y - 200, c.kind === 'gold' ? 'GOLD!' : 'GOT IT!', c.color, 1.3);
-    host.phoneFx(p, c.kind === 'gold' ? 'A sack of gold! Carry it to the rope ladder and climb.' : 'You have the chest! Heavy - walk it to the rope ladder and climb. ATTACK puts it down.', [30, 40, 30]);
+    host.phoneFx(p, c.kind === 'gold' ? 'A sack of gold! Carry it to the rope ladder and climb.' : c.kind === 'part' ? 'You have the part! Heavy - walk it to the rope ladder and climb. ATTACK puts it down.' : 'You have the chest! Heavy - walk it to the rope ladder and climb. ATTACK puts it down.', [30, 40, 30]);
+  }
+  // G5 (derelicts.js): a part comes unbolted in a man's hands: it is a chest (kind 'part') in his arms from this moment. info = { deck (the wreck's deck record), card (what the dock will offer), name (what the TV calls it) }. Returns the chest.
+  function give(p, info) {
+    const t = S.tre, K = T(), C = config.DERELICT.CRATE;
+    const c = { id: t.nextId++, vault: -1, kind: 'part', x: p.x, y: p.y, state: 'carried', by: [p.id], lifters: [p.id], w: C.W, pay: C.PAY, prog: 0, worked: false, heist: false, lifted: true, mode: 'walk', label: info.name || META.part.label, color: META.part.color, deck: info.deck || null, card: info.card || null };
+    t.chests.push(c);
+    p.carry = 'chest';
+    p.hook = null;
+    stats.lifted++;
+    stats.parts = (stats.parts || 0) + 1;
+    void K;
+    return c;
   }
   // The first time a chest leaves the ground: it counts, a lift in the ESCAPE calm is a HEIST if it gets home, and the vault's guards are called.
   function firstLift(c) {
@@ -159,13 +175,22 @@ export function createTreasure({ state, S, host }) {
     const i = c.by.indexOf(p.id);
     if (i >= 0) c.by.splice(i, 1);
     if (p.carry === 'chest') p.carry = null;
-    if (!c.by.length && c.state === 'carried') { settle(c, p.x, p.y); stats.dropped++; if (why) pop(state, c.x, c.y - 160, why, c.color, 1); }
+    if (!c.by.length && c.state === 'carried') { settle(c, p.x, p.y, p.on && p.on.deck); stats.dropped++; if (why) pop(state, c.x, c.y - 160, why, c.color, 1); }
   }
-  // It lies on the ground again at x, y; over an edge it is gone.
-  function settle(c, x, y) {
+  // It lies on the ground again at x, y; over an edge it is gone. On a wreck's deck (G5) it lies on the deck and drifts with it.
+  function settle(c, x, y, deck) {
     c.state = 'ground';
     c.by = [];
     c.prog = 0;
+    c.onDeck = null;
+    const dk = deck || c.deck;
+    if (dk && dk.derelict && S.decks.includes(dk) && x >= dk.x0 - 30 && x <= dk.x1 + 30 && Math.abs(y - dk.y) < 260) {
+      c.onDeck = dk;
+      c.x = Math.max(dk.x0 + 20, Math.min(dk.x1 - 20, x));
+      c.y = dk.y;
+      c.lx = c.x - (dk.x0 + dk.x1) / 2;
+      return true;
+    }
     for (const up of [140, 40, 280]) {
       const g = host.groundAt(x, y - up);
       if (g != null) { c.x = x; c.y = g; return true; }
@@ -225,6 +250,7 @@ export function createTreasure({ state, S, host }) {
       c.by = [p.id];
       c.state = 'aboard';
       stats.aboard++;
+      if (c.kind === 'part' && host.partIn) host.partIn(c, p, 'rope'); // (G5: a stripped part is aboard: the wreck's score and the Book)
       if (p.bot || !holdSpot(host.layout())) { p.carry = 'chest'; stowIn(c, p, true); } // (a bot has no Action to press, and a ship with no hold has nowhere to go)
       else host.phoneFx(p, 'Chest aboard! Carry it to the hold and STOW it.', [30, 40, 30]);
     } else {
@@ -248,7 +274,7 @@ export function createTreasure({ state, S, host }) {
     if (p && p.carry === 'chest') p.carry = null;
     stats.stowed++;
     if (p && !p.bot) host.phoneFx(p, 'Chest stowed (' + hold.list.length + '/' + T().HOLD_CAP + ') - it weighs on the lift until the stop ends', [30]);
-    if (!S.tre.stowMoment && p) { S.tre.stowMoment = true; moment('treasure-stowed', p, { name: 'the outpost', n: hold.list.length }); }
+    if (!S.tre.stowMoment && p && c.kind !== 'part') { S.tre.stowMoment = true; moment('treasure-stowed', p, { name: 'the outpost', n: hold.list.length }); }
     void auto;
     return true;
   }
@@ -290,6 +316,7 @@ export function createTreasure({ state, S, host }) {
     c.haul = null;
     stats.hooked++;
     if (!stowIn(c, p, true)) return;
+    if (c.kind === 'part' && host.partIn) host.partIn(c, p, 'hook'); // (G5)
     pop(state, c.x, c.y - 60, 'HOOKED!', c.color, 1.1);
     host.phoneFx(p, 'Hooked a chest - it is in the hold!', [30, 30, 30]);
   }
@@ -368,7 +395,7 @@ export function createTreasure({ state, S, host }) {
   function update(dt) {
     const t = S.tre, K = T(), map = mapNow();
     aboardStep();
-    t.on = !!(K.ENABLED && S.on && t.vaults.length && map);
+    t.on = !!(K.ENABLED && S.on && (t.vaults.length || t.keep) && map);
     if (!t.on) { // (too few crew, the stop over: the guards stand down)
       for (const g of t.guards) if (g.state !== 'gone') g.state = 'gone';
       t.shots.length = 0;
@@ -379,6 +406,12 @@ export function createTreasure({ state, S, host }) {
     // the chests
     for (const c of t.chests) {
       if (c.state === 'ground' || c.state === 'carried') { if (!c.worked && c.prog > 0) c.prog = Math.max(0, c.prog - dt * K.DECAY); c.worked = false; }
+      if (c.state === 'ground' && c.onDeck) { // (G5: lying on a wreck's deck: it drifts with it; the wreck gone, it is gone)
+        const dk = c.onDeck;
+        if (!S.decks.includes(dk)) { c.state = 'gone'; stats.lost++; continue; }
+        c.x = (dk.x0 + dk.x1) / 2 + c.lx;
+        c.y = dk.y;
+      }
       if (c.state === 'carried') {
         const men = c.by.map((id) => state.players[id]).filter((p) => p && p.on && p.on.away && (p.on.mode === 'walk' || p.on.mode === 'rope') && p.carry === 'chest' && !(p.ko > 0) && p.connected !== false);
         for (const id of c.by.slice()) { // (anybody who is not carrying any more: knocked out, gone airborne, a tool in his hands)
@@ -420,15 +453,16 @@ export function createTreasure({ state, S, host }) {
     if (!hold || !hold.list.length) return 0;
     const list = hold.list.splice(0);
     hold.w = 0;
-    let total = 0, heist = 0;
+    let total = 0, heist = 0, parts = 0;
     const who = [];
     for (const c of list) {
       total += c.pay;
+      if (c.kind === 'part') { parts++; if (host.partPaid) host.partPaid(c); continue; } // (G5: a stripped part is a named card at the dock, derelicts.js)
       if (c.heist) { heist++; total += K.HEIST.BONUS; for (const id of c.lifters) if (state.players[id] && !who.includes(state.players[id])) who.push(state.players[id]); }
     }
     stats.paid += total;
-    const deps = host.deps();
-    if (deps.treasure) deps.treasure(total, heist ? 'HEIST! ' + list.length + (list.length === 1 ? ' chest' : ' chests') + ' got away!' : 'Treasure! ' + list.length + (list.length === 1 ? ' chest' : ' chests'));
+    const deps = host.deps(), chests = list.length - parts;
+    if (deps.treasure) deps.treasure(total, parts && !chests ? 'Stripped! ' + parts + (parts === 1 ? ' part' : ' parts') : heist ? 'HEIST! ' + chests + (chests === 1 ? ' chest' : ' chests') + ' got away!' : 'Treasure! ' + chests + (chests === 1 ? ' chest' : ' chests') + (parts ? ' and ' + parts + (parts === 1 ? ' part' : ' parts') : ''));
     if (heist) { stats.heists += heist; moment('treasure-heist', who, { name: 'the outpost', n: heist }); }
     return total;
   }
@@ -439,9 +473,9 @@ export function createTreasure({ state, S, host }) {
     if (!t.on || !p.on || p.on.mode !== 'walk') return null;
     if (t.guards.some((g) => g.state !== 'gone' && g.tgt === p.id)) return { hint: 'GUARDS! They shoot at a man with a chest. Keep moving, ATTACK shoves them back, or put it down.', verb: 'CARRY' };
     const mine = chestOf(p, 'carried');
-    if (mine) return { hint: (mine.by.length > 1 ? 'You carry it together. ' : 'The chest is HEAVY - a second hand makes it faster. ') + 'Walk it to the rope ladder and climb. ATTACK puts it down.', verb: 'CARRY' };
+    if (mine) return { hint: (mine.by.length > 1 ? 'You carry it together. ' : 'The ' + (mine.kind === 'part' ? 'part' : 'chest') + ' is HEAVY - a second hand makes it faster. ') + 'Walk it to the rope ladder and climb. ATTACK puts it down.', verb: 'CARRY' };
     const c = chestFor(p);
-    if (c) return { hint: c.state === 'carried' ? 'HOLD the big button to take the other handle - two carry faster.' : 'HOLD the big button: grab the ' + (c.kind === 'gold' ? 'gold' : 'chest') + '.', verb: 'GRAB' };
+    if (c) return { hint: c.state === 'carried' ? 'HOLD the big button to take the other handle - two carry faster.' : 'HOLD the big button: grab the ' + (c.kind === 'gold' ? 'gold' : c.kind === 'part' ? 'part' : 'chest') + '.', verb: 'GRAB' };
     if (target(p)) return { hint: 'Treasure! A vault lies open (' + META.chest.label + ' on the TV). Grab a chest and carry it to the rope ladder.', verb: 'GRAB' };
     return null;
   }
@@ -456,7 +490,7 @@ export function createTreasure({ state, S, host }) {
     const t = S.tre;
     if (!t.on || !p.on || p.on.mode !== 'walk' || p.ko > 0) return null;
     let tx, label, kind;
-    if (carrying(p)) { tx = S.rope.x; label = 'CARRY THE CHEST TO THE ROPE LADDER'; kind = 'carry'; }
+    if (carrying(p)) { tx = S.rope.x; label = 'CARRY THE ' + (chestOf(p, 'carried') && chestOf(p, 'carried').kind === 'part' ? 'PART' : 'CHEST') + ' TO THE ROPE LADDER'; kind = 'carry'; }
     else {
       const c = target(p);
       if (!c) return null;
@@ -513,5 +547,5 @@ export function createTreasure({ state, S, host }) {
     return { id: 'vault', name: 'TREASURE', x, y: v.y - config.AWAY.LADDER.HOVER, gx: x, gy: v.y, flare: false, bot: false };
   }
 
-  return { trips: () => { stats.trips++; }, begin, reset, update, act, attack, shoveReady, speedMul, climbMul, onAboard, onGone, stow, pay, ui, job, target, hookable, hauling, hooked, live, tripChest, botGoal, vaultCall, carrying, chestOf, open, META };
+  return { trips: () => { stats.trips++; }, begin, reset, update, act, attack, shoveReady, speedMul, climbMul, onAboard, onGone, stow, pay, ui, job, target, hookable, hauling, hooked, live, tripChest, botGoal, vaultCall, carrying, chestOf, open, give, META };
 }

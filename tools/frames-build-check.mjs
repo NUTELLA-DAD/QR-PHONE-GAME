@@ -409,12 +409,12 @@ function p0(st, id) { return st.players[id]; }
 }
 
 // ---------------------------------------------------------------- 10. whole voyages with 8 bots (voyagesim)
-// (the shipped bots only take a frame when they cannot pay for the plain card, which is rare: this run sets FRAMES.BOTS.PREFER 0.8 so the bots really use them - they cost the bots wins, which is why 0 is the default)
+// (the shipped bots only take a frame when they cannot pay for the plain card, which is rare: this run sets FRAMES.BOTS.PREFER 0.8 so the bots really use them - they cost the bots wins, which is why 0 is the default) (G5: a wreck's named part takes the dock's one part slot, so this run pins NO_DERELICTS and tests the frames alone; tools/derelicts-check.mjs tests a named part bought as a frame)
 if (!quick) {
   const seeds = [3, 4, 5, 6, 7, 8];
   const { spawn } = await import('node:child_process');
   const rows = await Promise.all(seeds.map((s) => new Promise((res) => {
-    const c = spawn(process.execPath, [path.join(here, 'voyagesim.mjs'), '--child', '--seed', String(s), '--bots', '8', '--maxmin', '30', '--build', 'sparrow', '--set', 'FRAMES.BOTS.PREFER=0.8'], { env: { ...process.env, SCRAP_ON: '1', NO_FRAMES: '' } });
+    const c = spawn(process.execPath, [path.join(here, 'voyagesim.mjs'), '--child', '--seed', String(s), '--bots', '8', '--maxmin', '30', '--build', 'sparrow', '--set', 'FRAMES.BOTS.PREFER=0.8'], { env: { ...process.env, SCRAP_ON: '1', NO_FRAMES: '', NO_DERELICTS: '1' } }); // (G5: no wrecks here: a named part would take the dock's one part slot)
     let out = '';
     c.stdout.on('data', (d) => (out += d));
     c.on('close', () => { const l = out.split('\n').find((x) => x.startsWith('RESULT ')); try { res(l ? JSON.parse(l.slice(7)) : null); } catch { res(null); } });

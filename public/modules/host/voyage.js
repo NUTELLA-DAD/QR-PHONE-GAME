@@ -179,6 +179,36 @@ function generateCurriculum(seed, opts = {}) {
   return { seed, columns, mode: opts.mode, voyageNo: opts.voyageNo || 1, curriculum: true };
 }
 
+// DEFEND (LOOP.md G6, config.DERELICT.DEFEND, stopGoals.js): in a long voyage one middle stop may be a stranded balloon to hold against bat waves (the route map's tag says DEFEND). Like the catch-up salvage run it is decided on the way
+// (simulation.js startRoute calls markDefend for the stop the crew is leaving), so the route itself is exactly what generateVoyage made. Which column and which stop are a hash of the route's seed (no random numbers); it takes an ordinary stop of
+// its column - never a lair, a ring, the Flagship, a salvage run or the column's only easy way - keeps its skulls and reward, allows only bats, and loses its Nemesis / multi-part flags. At most one a voyage, none in a second voyage or a short route.
+export function defendPlan(voyage) {
+  const K = config.DERELICT, DF = K.DEFEND, n = voyage.columns.length;
+  if (!K.ENABLED || !DF.ENABLED || !voyage.curriculum || (voyage.voyageNo || 1) > 1 || n < DF.MIN_STOPS) return null;
+  const rand = mulberry((voyage.seed ^ 0x64656664) >>> 0);
+  if (rand() >= DF.CHANCE) return null;
+  const cols = [];
+  for (let c = Math.max(1, DF.FROM_COLUMN); c <= n - 3; c++) cols.push(c);
+  return cols.length ? { col: cols[Math.floor(rand() * cols.length)], r: rand() } : null;
+}
+// The crew is leaving `stop`: if the column ahead is the planned one, one of its stops becomes the DEFEND stop (once). Returns that stop or null.
+export function markDefend(voyage, stop) {
+  const plan = (voyage.defendPlan ||= { v: defendPlan(voyage) }).v;
+  if (!plan || voyage.columns.flat().some((s) => s.defend)) return null;
+  const col = stop.next.map((id) => stopById(voyage, id)).filter(Boolean);
+  if (!col.length || col[0].col !== plan.col) return null;
+  const homes = col.filter((s) => !s.lair && !s.ring && !s.flagship && !s.harbour && !s.salvage && s.danger <= s.base && col.some((o) => o !== s && o.danger <= o.base));
+  if (!homes.length) return null;
+  const s = homes[Math.floor(plan.r * homes.length)];
+  s.defend = true;
+  s.kind = 'defend';
+  s.gates = config.DERELICT.DEFEND.GATES.slice();
+  s.tag = 'DEFEND';
+  delete s.nemesis;
+  delete s.multi;
+  return s;
+}
+
 // Lairs under the curriculum: only in a slot with lair: true, at LAIR_FROM of the route or later, as many as markLairs would (config.CREATURES.LAIR.COUNT), never two columns in a row, never the Flagship.
 // Only a stop already in its creature's sky can hold one (Kraken in the sea, Drake in the Ember Forge, Thunderbird in the storm), never a ring stop, and a column always keeps a branch at or under its base skulls
 // (the lair is never its only easy way). Like markLairs this has a random stream of its own and changes nothing but the lair stop, so a route without lairs is the same route (tools/creature-check.mjs holds it to that).

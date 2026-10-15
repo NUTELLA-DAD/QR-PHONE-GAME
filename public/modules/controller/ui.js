@@ -38,7 +38,7 @@ export function createControllerUI({ network }) {
     [(n) => !n.locked && n.carry === 'coal', () => 'Bring the coal to a boiler'],
     [(n) => !n.locked && n.carry === 'scrap' && n.job && n.job.kind === 'buildframe', () => 'Bring the scrap to the frame, then HOLD the big button'], // (LOOP.md G4)
     [(n) => !n.locked && n.carry === 'scrap', () => 'Bring the scrap to the hold'],
-    [(n) => !n.locked && n.carry === 'chest', () => 'Carry the chest up the rope, then to the hold'],
+    [(n) => !n.locked && n.carry === 'chest', () => 'Carry it up the rope, then to the hold'],
     [(n) => !n.locked && n.carry, () => 'Big button uses what you hold'],
     [() => true, () => 'Walk to a station, rack, fire or hole'],
   ];
@@ -61,7 +61,7 @@ export function createControllerUI({ network }) {
   const ACTION_ICONS = [
     ['FIRE FLARE', '🧨'], ['FLARE READY', '⏳'], ['LOWER THE ROPE', '🪜'], ['CLIMB DOWN THE ROPE', '🪜'], ['ROPE LADDER', '🪜'], ['CLIMB', '🧗'], ['WALKING HOME', '🚶'], // (CASTLE.md A0: the away team)
     ['CRANK', '⚙️'], ['PLANT', '💣'], ['SABOTAGE', '🧨'], ['LIGHT THE', '🔥'], ['FREE THE', '🔓'], ['STEAL THE', '🚩'], ['GRAB THE POWDER', '🛢️'], ['POWDER KEG', '🛢️'], // (CASTLE.md A1: the castle objectives)
-    ['GRAB THE CHEST', '🧰'], ['GRAB THE GOLD', '💰'], ['HELP CARRY', '🤝'], ['STOW THE CHEST', '🧰'], // (CASTLE.md A2: the outposts' treasure)
+    ['UNBOLT', '🔧'], ['LIFT THE PART', '⚙️'], ['OPEN THE LOCKER', '🗝️'], ['GRAB THE CHEST', '🧰'], ['GRAB THE GOLD', '💰'], ['HELP CARRY', '🤝'], ['STOW THE CHEST', '🧰'], // (CASTLE.md A2: the outposts' treasure)
     ['BUILD ', '🏗️'], ['STOW THE SCRAP', '🔩'], ['Take scrap out', '🔩'], ['Pick up the scrap', '🔩'], ['Take scrap off', '🔩'], ['DUMP THE SCRAP', '🔩'], ['Swap to hookshot', '🪝'], ['Take hookshot', '🪝'], ['Reel in', '🪝'], ['KICK', '🦶'], ['Auto guns', '🔫'],
     ['Swap to sword', '🗡️'], ['Swap to hammer', '🔨'], ['Swap to extinguisher', '🧯'], ['Take sword', '🗡️'], ['Take hammer', '🔨'], ['Take extinguisher', '🧯'], ['Put back', '↩️'],
     ['TAKE THE HELM', '☸️'], ['Sabotage', '🧨'], ['Defenders', '🛡️'], ['Spray fire', '🧯'], ['Clear spores', '🍄'], ['Refill oxygen', '🫧'], ['Chip ice', '🧊'], ['Patch hole', '🔨'], ['Repair', '🔧'], ['Revive', '💫'],

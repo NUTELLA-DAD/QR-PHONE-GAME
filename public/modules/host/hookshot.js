@@ -50,8 +50,9 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
       const x0 = val(s.x0);
       const x1 = val(s.x1);
       const gun = typeof s.id === 'string' && s.id.startsWith('gunship');
+      const wreck = typeof s.id === 'string' && s.id.startsWith('ground:der'); // (G5: a wreck's hull under its deck catches the hook too)
       if (x < x0 - 6 || x > x1 + 6) continue;
-      if (y >= sy - H.THICK && y <= sy + (gun ? H.GUNSHIP_DEPTH : H.THICK)) {
+      if (y >= sy - H.THICK && y <= sy + (gun || wreck ? H.GUNSHIP_DEPTH : H.THICK)) {
         const ox = x - x0;
         const oy = y - sy;
         const id = s.id;
