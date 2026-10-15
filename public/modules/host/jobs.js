@@ -261,5 +261,5 @@ export function createJobFinder(state) {
 
   // What the phone gets: null until they have been free a moment.
   const ui = (p) => (p.job && p.job.dir && (p.freeT >= J.IDLE_AFTER || p.job.kind === 'pickup' || p.job.away) ? { label: p.job.label, dir: p.job.dir, kind: p.job.kind, ...(p.job.verb ? { verb: p.job.verb } : {}), ...(p.lock ? { seated: true } : {}) } : null);
-  return { update, ui };
+  return { update, ui, roomName, deckName: (d) => (L.platforms[d] || {}).name }; // (PLAYTEST1 P2: the phone's "LOWER DECK - HOLD")
 }

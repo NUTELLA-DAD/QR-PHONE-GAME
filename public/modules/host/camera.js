@@ -105,7 +105,8 @@ export function createWorldCamera() {
     const ringMul = state.course && state.course.map && state.course.map.ring ? Math.max(0.5, Math.min(1.5, finite(config.RING3D && config.RING3D.ZOOM_MUL, 1))) : 1; // (R2: a ring map's castle is big; RING3D.ZOOM_MUL widens or tightens the plain framing there. 1 = off)
     const baseZoom = baseZoom0 * zoomMul * ringMul; // (the split's main view looks a little wider than the one ship's normal framing)
     const fitZoom = Math.min(width / (x1 - x0), height / (y1 - y0));
-    const minZoom = baseZoom0 / maxOut;
+    let minZoom = baseZoom0 / maxOut;
+    if (C.CREW_MIN_PX > 0 && !versus(state) && !state.creature && !(state.course && state.course.map && state.course.map.ring)) minZoom = Math.max(minZoom, Math.min(baseZoom, C.CREW_MIN_PX / C.CREW_PX * (height / 1080))); // (PLAYTEST1 P2: a crewman is never drawn under CREW_MIN_PX screen px - the zoom-out for threats stops there; never tighter than the normal view)
     const zoom = Math.max(minZoom, Math.min(baseZoom, fitZoom));
     const shipsFit = Math.min(width / (sx1 - sx0), height / (sy1 - sy0));
     // Centre on the framed box, but never let the ships slide off screen.

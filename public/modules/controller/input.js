@@ -317,6 +317,22 @@ export function createControllerInput({ network, ui }) {
     () => {},
   );
 
+  // FIND ME (PLAYTEST1 P2): the TV flares a ring and your name round your figure. The host has its own short cooldown; this just shows the press.
+  const findButton = document.getElementById('findbtn');
+  if (findButton) {
+    let sentT = 0;
+    pressable(
+      findButton,
+      () => {
+        network.sendInput({ jx, jy, find: 1 });
+        findButton.classList.add('sent');
+        clearTimeout(sentT);
+        sentT = setTimeout(() => findButton.classList.remove('sent'), 700);
+      },
+      () => {},
+    );
+  }
+
   // Radar: tap a blip to spot it (a big, forgiving tap area; the stick keeps its value).
   document.getElementById('radar').addEventListener('pointerdown', (event) => {
     const hit = ui.radarPick ? ui.radarPick(event.clientX, event.clientY) : null;

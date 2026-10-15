@@ -39,6 +39,7 @@ export function applyPlayerInput(state, player, data) {
   if (data.swap && state.match && state.match.on) state.match.swapTeam(player); // Versus lobby: "You're RED - tap to swap"
   if ('prime' in data) player.prime = !!data.prime; // holding the PRIME button on a gun
   if (data.help) player.helpQ = true; // HELP! button
+  { const FM = config.CONTROLS.FIND_ME; if (data.find && FM.ENABLED && !player.bot && !(player.pingT > FM.TIME - FM.COOLDOWN)) player.pingT = FM.TIME; } // FIND ME button (PLAYTEST1 P2): a ring and the name on the TV; pressing again within COOLDOWN s does nothing
   if ('spot' in data) player.spotQ = { i: data.spot | 0, s: data.sq | 0 }; // tapped a radar ping
 }
 

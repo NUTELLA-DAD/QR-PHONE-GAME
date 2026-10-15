@@ -161,6 +161,22 @@ export function createShipSim(world, ship, W) {
   const CTL = config.CONTROLS; // phone controls: grab lockout, hold-to-swap, hysteresis (Phase C)
   const modules = createModules(ship);
   const jobFinder = createJobFinder(state);
+  // PLAYTEST1 P2 (FIND ME: where am I). player.pingT = seconds of the ring left. A phone press (host/network.js) sets it; so do a join, a wake and a landing (AUTO). View only: nothing in the sim reads it.
+  const FIND_ME = config.CONTROLS.FIND_ME;
+  const findMeTick = (player, dt) => {
+    const now = (player.fall ? 1 : 0) | (player.ko > 0 ? 2 : 0), was = player.pingSeen;
+    player.pingSeen = now;
+    if (player.pingT > 0) player.pingT = Math.max(0, player.pingT - dt);
+    if (player.connected === false) return;
+    const auto = (what) => { if (FIND_ME.AUTO.includes(what)) player.pingT = FIND_ME.TIME; };
+    if (was === undefined) auto('join');
+    else if ((was & 1) && !(now & 1)) auto('land');
+    else if ((was & 2) && !(now & 2)) auto('wake');
+  };
+  const roomLine = (d, x) => { // ("LOWER DECK - HOLD": the deck, then the room if it has a name of its own)
+    const deck = String(jobFinder.deckName(d) || '').toUpperCase(), room = String(jobFinder.roomName(d, x) || '').toUpperCase();
+    return !room || room === deck ? deck : deck ? deck + ' - ' + room : room;
+  };
   state.modules = modules.list;
   const PICKUPS = [];
   const rebuildPickups = () => { PICKUPS.length = 0; PICKUPS.push(...layout.racks, ...layout.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))); };
@@ -1289,6 +1305,7 @@ export function createShipSim(world, ship, W) {
       if (player.bot) updateBot(player, state, dt);
       if (player.koGrace > 0) player.koGrace -= dt;
       health.step(player, dt); // (crew health: i-frames, burns, the medical bay, the flashes)
+      if (FIND_ME.ENABLED && !player.bot) findMeTick(player, dt); // (PLAYTEST1 P2: the FIND ME ring's clock, and its automatic flares)
       if (player.on && player.on.ring != null) W.ring.boardCheck(player); // (R0: standing on a ring map's boarding gallery, ring.js)
       else if (player.on && !player.on.away && W.creatures) W.creatures.boardCheck(player); // (C.2: standing on a giant creature: if it dives or dies, or he is knocked out, he falls) (A0: the away team on the ground is ground.js's)
       if (player.hook && (player.fall || player.ko > 0 || player.lock || player.swing || player.conn != null || player.connected === false)) hookshot.clear(player);
@@ -1746,13 +1763,14 @@ export function createShipSim(world, ship, W) {
       const awayUi = player.on && player.on.away ? W.ground.ui(player) : null; // (A0: the away man's hint and STRANDED countdown, ground.js)
       if (awayUi && awayUi.status) status = awayUi.status;
       if (awayUi && awayUi.u.duel) attackLabel = 'Swing'; // (CASTLE.md A4: in a sword fight the left button swings, the other one blocks)
-      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, st ? st.s + '/' + st.l + '/' + st.w + '/' + st.f : '', primePct, loadPct, jobUi ? jobUi.label + '|' + jobUi.dir : '', aid, gaid, grabNow ? grabNow.label + grabNow.swap : '', glock, progNow, ship.pose.f, state.turning.t > 0 ? 1 : 0, hp, player.team ? player.team + (state.match && state.match.phase === 'lobby' ? 's' : '') : '', eng ? JSON.stringify(eng) : '', alarm, awayUi ? awayUi.k : ''].join('|');
+      const room = FIND_ME.ENABLED && FIND_ME.ROOM && !player.bot && !player.lock && !player.hj && !player.fly && player.conn == null && !player.on && player.d != null ? roomLine(player.d, player.x) : ''; // (PLAYTEST1 P2: while walking, the phone's info line names the deck and room: LOWER DECK - HOLD)
+      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, st ? st.s + '/' + st.l + '/' + st.w + '/' + st.f : '', primePct, loadPct, jobUi ? jobUi.label + '|' + jobUi.dir : '', aid, gaid, grabNow ? grabNow.label + grabNow.swap : '', glock, progNow, ship.pose.f, state.turning.t > 0 ? 1 : 0, hp, player.team ? player.team + (state.match && state.match.phase === 'lobby' ? 's' : '') : '', eng ? JSON.stringify(eng) : '', alarm, awayUi ? awayUi.k : '', room].join('|');
       const hv = config.CONTROLS.HELM_V2 && player.lock && kind === 'helm' && !player.hj && !player.bot ? helmGauge() : null; // (F3: the phone's gas gauge, [gas, the hover mark] in whole numbers: the pressure lever is only a readout now)
       const keyF = hv ? key + '|' + hv : key;
       if (keyF !== player.uk) {
         player.uk = keyF;
         if (!player.bot) {
-          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, st, prime: primePct, load: loadPct, job: jobUi, aid, grab: grabNow ? grabNow.label : null, gaid, gswap: !!(grabNow && grabNow.swap), glock, prog: progNow, hp, hpMax: config.HEALTH.MAX, jat: config.HEALTH.JOB_AT, med: !!health.medbay(), fc: ship.pose.f, tn: state.turning.t > 0, eng, alarm, tm: player.team ? { id: player.team, name: teamOf(player.team).name, color: teamOf(player.team).color, swap: !!(state.match && state.match.on && state.match.phase === 'lobby') } : null }; // (tm: Versus - the side the phone is on, and whether it may still swap)
+          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, st, prime: primePct, load: loadPct, job: jobUi, aid, grab: grabNow ? grabNow.label : null, gaid, gswap: !!(grabNow && grabNow.swap), glock, prog: progNow, hp, hpMax: config.HEALTH.MAX, jat: config.HEALTH.JOB_AT, med: !!health.medbay(), fc: ship.pose.f, tn: state.turning.t > 0, eng, alarm, ...(room ? { room } : {}), tm: player.team ? { id: player.team, name: teamOf(player.team).name, color: teamOf(player.team).color, swap: !!(state.match && state.match.on && state.match.phase === 'lobby') } : null }; // (tm: Versus - the side the phone is on, and whether it may still swap)
           if (hv) player.ui.hv = hv;
           if (awayUi) { player.ui.away = awayUi.u; player.ui.station = 'AWAY TEAM'; }
           emitPlayerUi(player.id, player.ui);
